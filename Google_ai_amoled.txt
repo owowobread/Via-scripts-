@@ -1,0 +1,98 @@
+// ==UserScript==
+// @name         Google AI Mode - Brute Force Gray-to-Black
+// @namespace    http://tampermonkey.net/
+// @version      2026.11
+// @description  Scans all elements and converts any dark gray backgrounds to pure AMOLED black. Leaves text/icons alone. Enforces brevity.
+// @match        https://*.google.com/search*
+// @match        https://*.google.com/ai*
+// @run-at       document-idle
+// ==/UserScript==
+
+(function() {
+    'use strict';
+
+    // 1. Force the absolute base layer to black to prevent white flashing
+    const baseStyle = document.createElement('style');
+    baseStyle.innerHTML = `
+        html, body, #main { background-color: #000000 !important; }
+        h1, h2, h3, p, span, a, div { color: #E8E8E8 !important; }
+        /* Add a faint border so suggestion cards and the search pill don't become invisible voids */
+        div[role="listitem"], div[jsname*="suggestion"], form, .search-box {
+            border: 1px solid #1A1A1A !important;
+        }
+    `;
+    document.head.appendChild(baseStyle);
+
+    // 2. The Brute-Force Color Scanner
+    function exterminateGray() {
+        const elements = document.querySelectorAll('*');
+        elements.forEach(el => {
+            const style = window.getComputedStyle(el);
+            const bg = style.backgroundColor;
+            
+            // Skip elements that are already transparent
+            if (bg === 'rgba(0, 0, 0, 0)' || bg === 'transparent') return;
+
+            // Extract the RGB values
+            const match = bg.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+            if (match) {
+                const r = parseInt(match[1], 10);
+                const g = parseInt(match[2], 10);
+                const b = parseInt(match[3], 10);
+
+                // Identify shades of dark gray (Values are close to each other, not pure black, not white)
+                const isGray = Math.abs(r - g) <= 15 && Math.abs(g - b) <= 15 && r > 0 && r < 100;
+
+                if (isGray) {
+                    el.style.setProperty('background-color', '#000000', 'important');
+                    el.style.setProperty('background-image', 'none', 'important'); // Kills gradient glows
+                    el.style.setProperty('box-shadow', 'none', 'important');
+                }
+            }
+        });
+    }
+
+    // Run the scanner immediately
+    exterminateGray();
+
+    // Run the scanner continuously as Google dynamically loads new UI elements
+    const observer = new MutationObserver((mutations) => {
+        let shouldRun = false;
+        for (const mutation of mutations) {
+            if (mutation.addedNodes.length > 0) {
+                shouldRun = true;
+                break;
+            }
+        }
+        if (shouldRun) exterminateGray();
+    });
+    
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    // 3. Google Assistant Brevity Logic
+    const brevitySuffix = " (Respond in a very short, concise Google Assistant style. Avoid any conversational filler or meta-commentary unless I explicitly ask for details or the topic requires deep explanation.)";
+    
+    function applyBrevity(element) {
+        if (!element) return;
+        let val = element.value || element.innerText || "";
+        if (val.trim() && !val.includes(brevitySuffix)) {
+            if (element.value !== undefined) {
+                element.value = val.trim() + brevitySuffix;
+            } else {
+                element.innerText = val.trim() + brevitySuffix;
+            }
+        }
+    }
+
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT')) {
+            applyBrevity(e.target);
+        }
+    }, true);
+    
+    document.addEventListener('pointerdown', e => {
+        if (e.target.closest('button, [role="button"]')) {
+            applyBrevity(document.querySelector('textarea, input[type="text"]'));
+        }
+    }, true);
+})();

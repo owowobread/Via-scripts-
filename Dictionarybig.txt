@@ -1,0 +1,232 @@
+// ==UserScript==
+// @name         Universal AMOLED Dictionary
+// @namespace    via.browser.scripts
+// @version      7.0
+// @description  CORS-Bypass for Suggestions, AMOLED, Hindi, Images, Anti-Conflict.
+// @match        *
+// ==/UserScript==
+
+(function () {
+    // 1. GLOBAL KILL SWITCH
+    if (window.__ultimateDictRunning) return;
+    window.__ultimateDictRunning = true;
+
+    // Destroy old remnants
+    document.querySelectorAll('[id^="via-dict-"]').forEach(el => el.remove());
+
+    // 2. Inject CSS
+    const styleId = 'ultimate-dict-styles';
+    if (!document.getElementById(styleId)) {
+        const style = document.createElement('style');
+        style.id = styleId;
+        style.textContent = `
+            .ult-sugg-row::-webkit-scrollbar { display: none; }
+            .ult-pill { 
+                background: #1f1f1f; color: #e3e3e3; border: 1px solid #444; 
+                border-radius: 16px; padding: 6px 12px; font-size: 13px; 
+                cursor: pointer; flex-shrink: 0; white-space: nowrap; 
+                display: flex; align-items: center; gap: 6px; 
+                font-family: sans-serif; transition: background 0.2s;
+            }
+            .ult-pill:active { background: #333333; }
+            .ult-icon-box {
+                background: #111111; padding: 8px; border-radius: 10px; 
+                border: 1px solid #333; display: flex; align-items: center; 
+                justify-content: center; box-shadow: 0 0 8px rgba(168, 199, 250, 0.1);
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    // 3. Create UI Container
+    const popup = document.createElement('div');
+    popup.id = 'via-dict-ultimate-container';
+    Object.assign(popup.style, {
+        position: 'fixed', bottom: '-100%', left: '0', width: '100%', maxHeight: '85vh',
+        backgroundColor: '#000000', color: '#ffffff', padding: '16px',
+        borderRadius: '20px 20px 0 0', borderTop: '1px solid #333333',
+        boxShadow: '0 -8px 24px rgba(0,0,0,0.9)',
+        zIndex: '2147483647', fontFamily: 'sans-serif',
+        transition: 'all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)', 
+        display: 'flex', flexDirection: 'column', boxSizing: 'border-box'
+    });
+
+    // 4. HTML Structure
+    popup.innerHTML = `
+        <div style="width: 36px; height: 4px; background: #555; border-radius: 2px; margin: -8px auto 16px auto;"></div>
+        
+        <div id="ult-header" style="display: flex; gap: 12px; align-items: center; cursor: pointer;">
+            <div class="ult-icon-box">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#a8c7fa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+                    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+                </svg>
+            </div>
+            <div style="overflow: hidden; flex-grow: 1;">
+                <div class="ult-word" style="font-weight: 600; font-size: 16px; color: #ffffff;"></div>
+                <div class="ult-def" style="font-size: 14px; color: #aaaaaa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"></div>
+            </div>
+        </div>
+        
+        <div class="ult-sugg-row" style="display: none; margin-top: 16px; gap: 8px; overflow-x: auto; padding-bottom: 4px;"></div>
+        
+        <div class="ult-body" style="display: none; margin-top: 16px; border-top: 1px solid #333333; padding-top: 12px; font-size: 14px; overflow-y: auto; line-height: 1.5; color: #dddddd; flex-grow: 1;"></div>
+    `;
+    document.body.appendChild(popup);
+
+    const wordEl = popup.querySelector('.ult-word');
+    const defEl = popup.querySelector('.ult-def');
+    const suggEl = popup.querySelector('.ult-sugg-row');
+    const bodyEl = popup.querySelector('.ult-body');
+    let timer;
+    let originalDictHTML = ''; 
+
+    // 5. Secure APIs (with JSONP bypass for Google Suggestions)
+    const fetchAPI = async (url) => {
+        try { const res = await fetch(url); return res.ok ? await res.json() : null; } 
+        catch { return null; }
+    };
+
+    const getHindi = async (text) => {
+        try {
+            const res = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=hi&dt=t&q=${encodeURIComponent(text)}`);
+            const data = await res.json();
+            return data[0][0][0] || '';
+        } catch { return ''; }
+    };
+
+    // JSONP Implementation to bypass CORS on external websites
+    const getSuggestionsJSONP = (text) => {
+        return new Promise((resolve) => {
+            const cbName = 'viaDictCb_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+            
+            // Timeout failsafe
+            let timeout = setTimeout(() => {
+                cleanup(); resolve([]);
+            }, 3000); 
+
+            const cleanup = () => {
+                delete window[cbName];
+                const s = document.getElementById(cbName);
+                if (s) s.remove();
+            };
+
+            // This function handles Google's injected response
+            window[cbName] = (data) => {
+                clearTimeout(timeout);
+                resolve(data[1] || []);
+                cleanup();
+            };
+
+            // Inject script to bypass CORS
+            const script = document.createElement('script');
+            script.id = cbName;
+            script.src = `https://suggestqueries.google.com/complete/search?client=chrome&q=${encodeURIComponent(text)}&callback=${cbName}`;
+            script.onerror = () => {
+                clearTimeout(timeout); resolve([]); cleanup();
+            };
+            document.head.appendChild(script);
+        });
+    };
+
+    // 6. Monitor Selection
+    document.addEventListener('selectionchange', () => {
+        clearTimeout(timer);
+        timer = setTimeout(async () => {
+            const text = window.getSelection().toString().trim();
+            
+            if (text && text.split(' ').length === 1 && text.length < 25) {
+                
+                const [dictData, hindiText, wikipediaData, suggestions] = await Promise.all([
+                    fetchAPI(`https://api.dictionaryapi.dev/api/v2/entries/en/${text.toLowerCase()}`),
+                    getHindi(text.toLowerCase()),
+                    fetchAPI(`https://en.wikipedia.org/w/api.php?action=query&titles=${text.toLowerCase()}&prop=pageimages&format=json&pithumbsize=300&origin=*`),
+                    getSuggestionsJSONP(text.toLowerCase()) // Now uses JSONP
+                ]);
+
+                if (dictData && dictData[0]) {
+                    const d = dictData[0], meaning = d.meanings[0];
+                    const phonetic = d.phonetic || (d.phonetics && d.phonetics.find(p => p.text) || {}).text || '';
+                    
+                    wordEl.innerHTML = `${d.word} <span style="color:#888; font-size:13px; font-weight:normal; margin-left:4px;">${phonetic}</span> <span style="color:#4caf50; margin-left:6px;">${hindiText}</span>`;
+                    defEl.innerText = `${meaning.partOfSpeech} • ${meaning.definitions[0].definition}`;
+                    
+                    // Extract Wiki Image
+                    let imgUrl = null;
+                    if (wikipediaData && wikipediaData.query && wikipediaData.query.pages) {
+                        const pageId = Object.keys(wikipediaData.query.pages)[0];
+                        imgUrl = (pageId !== "-1" && wikipediaData.query.pages[pageId].thumbnail) ? wikipediaData.query.pages[pageId].thumbnail.source : null;
+                    }
+                    const imgHtml = imgUrl ? `<div style="text-align:center; margin-bottom:12px;"><img src="${imgUrl}" style="max-width:100%; border-radius:8px; max-height:200px; object-fit:cover; border: 1px solid #333;" /></div>` : '';
+
+                    originalDictHTML = `
+                        ${imgHtml}
+                        <div style="font-size: 16px; margin-bottom: 12px; color: #4caf50; font-weight: bold;">हिंदी अर्थ: ${hindiText}</div>
+                        ${d.meanings.map(m => 
+                        `<div style="color:#a8c7fa; font-weight:bold; margin-bottom:4px; text-transform: capitalize; border-bottom: 1px dashed #333333; padding-bottom: 2px;">${m.partOfSpeech}</div>
+                         ${m.definitions.slice(0,3).map((def, i) => `<div style="margin-bottom:12px; color: #cccccc;">${i+1}. ${def.definition}</div>`).join('')}`
+                    ).join('')}`;
+                    
+                    bodyEl.innerHTML = originalDictHTML;
+
+                    // Build Suggestion Pills
+                    if (suggestions.length > 0) {
+                        suggEl.innerHTML = suggestions.map(s => 
+                            `<button class="ult-pill" data-query="${s}">
+                                <span style="color:#a8c7fa;">🔍</span> ${s}
+                            </button>`
+                        ).join('');
+                        suggEl.style.display = 'flex';
+                    } else {
+                        suggEl.style.display = 'none';
+                    }
+                    
+                    // Show Popup
+                    popup.style.height = 'auto';
+                    popup.style.bottom = '0';
+                    bodyEl.style.display = 'none'; 
+                }
+            }
+        }, 500); 
+    });
+    
+    // 7. Click Interactions
+    popup.addEventListener('pointerdown', (e) => e.stopPropagation());
+
+    document.getElementById('ult-header').addEventListener('click', (e) => {
+        e.stopPropagation();
+        bodyEl.innerHTML = originalDictHTML; 
+        bodyEl.style.display = bodyEl.style.display === 'none' ? 'block' : 'none';
+        popup.style.height = bodyEl.style.display === 'block' ? '50vh' : 'auto';
+    });
+
+    suggEl.addEventListener('click', (e) => {
+        const pill = e.target.closest('.ult-pill');
+        if (!pill) return;
+        const query = pill.getAttribute('data-query');
+        
+        popup.style.height = '85vh';
+        bodyEl.style.display = 'block';
+        
+        bodyEl.innerHTML = `
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; background: #111; padding: 12px; border-radius: 8px;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                    <span style="font-weight:bold; color:#fff;">${query}</span>
+                </div>
+                <button onclick="window.open('https://www.google.com/search?q=${encodeURIComponent(query)}', '_blank')" style="background:#a8c7fa; color:#000000; padding:6px 12px; border-radius:16px; border:none; font-weight:bold; cursor:pointer;">Google Search ↗</button>
+            </div>
+            <iframe src="https://www.google.com/search?q=${encodeURIComponent(query)}&igu=1" style="width:100%; height:calc(100% - 60px); border:none; border-radius:8px; background:#fff;"></iframe>
+        `;
+    });
+
+    document.addEventListener('pointerdown', (e) => {
+        if (!popup.contains(e.target)) {
+            popup.style.bottom = '-100%';
+            setTimeout(() => { 
+                bodyEl.style.display = 'none'; 
+                popup.style.height = 'auto'; 
+            }, 300); 
+        }
+    });
+})();

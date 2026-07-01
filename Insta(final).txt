@@ -1,0 +1,511 @@
+// ==UserScript==
+// @name         Instagram Ultimate Nuke v27 + Max Quality Enforcer v3
+// @namespace    https://viayoo.com/
+// @version      27.3
+// @description  Zero Clutter Pure Media Feed, Auto-Zoomed Fullscreen, Safe Black Box Fix, Quick Save, Master Toggle PLUS MSE Blob Killer and Strict Preload.
+// @author       You
+// @run-at       document-start
+// @match        https://*.instagram.com/*
+// @grant        none
+// ==/UserScript==
+
+(function() {
+    'use strict';
+
+    // =========================================================================
+    // 0. POPUP TAB BOT WORKER (Runs ONLY inside the new temporary tab)
+    // =========================================================================
+    if (window.location.search.includes('auto_save_bot=true')) {
+        document.documentElement.style.opacity = '0';
+        document.documentElement.style.pointerEvents = 'none';
+        document.body.style.backgroundColor = '#000';
+        
+        let botAttempts = 0;
+        const botInt = setInterval(() => {
+            botAttempts++;
+            if (botAttempts > 200) { 
+                clearInterval(botInt);
+                localStorage.setItem('ig_bot_result', 'timeout');
+                window.close(); 
+                return;
+            }
+
+            const svgs = document.querySelectorAll('svg');
+            for (let svg of svgs) {
+                let label = (svg.getAttribute('aria-label') || '').trim();
+                
+                if (label === 'Save' || label === 'Remove') {
+                    clearInterval(botInt);
+                    const btn = svg.closest('button, [role="button"], a') || svg;
+                    btn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+                    btn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+                    btn.click();
+                    localStorage.setItem('ig_bot_result', label === 'Remove' ? 'removed' : 'saved');
+                    setTimeout(() => window.close(), 800);
+                    return;
+                }
+                
+                const poly = svg.querySelector('polygon');
+                const path = svg.querySelector('path');
+                if ((poly && poly.getAttribute('points') && poly.getAttribute('points').includes('20 21 12')) || 
+                    (path && path.getAttribute('d') && path.getAttribute('d').includes('20 21 12'))) {
+                    clearInterval(botInt);
+                    const btn = svg.closest('button, [role="button"], a') || svg;
+                    btn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+                    btn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+                    btn.click();
+                    localStorage.setItem('ig_bot_result', 'toggled');
+                    setTimeout(() => window.close(), 800);
+                    return;
+                }
+            }
+        }, 50);
+        return; 
+    }
+
+    // =========================================================================
+    // 1. KILL ADAPTIVE STREAMING ENGINE (No more blob: URLs)
+    // =========================================================================
+    try {
+        Object.defineProperty(window, 'MediaSource', { get: () => undefined });
+        Object.defineProperty(window, 'WebKitMediaSource', { get: () => undefined });
+    } catch (e) {}
+
+    // =========================================================================
+    // 2. THE DATA MUTATOR: Destroys low quality streams & playlists in JSON
+    // =========================================================================
+    function nukeLowQuality(obj) {
+        if (!obj || typeof obj !== 'object') return;
+
+        if (obj.dash_manifest) delete obj.dash_manifest;
+
+        if (Array.isArray(obj.video_versions) && obj.video_versions.length > 0) {
+            let staticFiles = obj.video_versions.filter(v => v.url && !v.url.includes('.m3u8') && !v.url.includes('.mpd'));
+            
+            if (staticFiles.length > 0) {
+                staticFiles.sort((a, b) => ((b.width || 0) * (b.height || 0)) - ((a.width || 0) * (a.height || 0)));
+                obj.video_versions = [staticFiles[0]];
+            }
+        }
+
+        for (const key in obj) {
+            if (Object.prototype.hasOwnProperty.call(obj, key)) {
+                if (typeof obj[key] === 'object' && obj[key] !== null) {
+                    nukeLowQuality(obj[key]);
+                }
+            }
+        }
+    }
+
+    // =========================================================================
+    // 3. FETCH INTERCEPTOR: Hooks into Instagram's data requests
+    // =========================================================================
+    const originalFetch = window.fetch;
+    window.fetch = async function(...args) {
+        const url = args[0] && typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url ? args[0].url : '');
+        const response = await originalFetch.apply(this, args);
+
+        if (url.includes('/graphql/') || url.includes('/api/')) {
+            try {
+                const clone = response.clone();
+                const json = await clone.json();
+                
+                nukeLowQuality(json);
+                
+                return new Response(JSON.stringify(json), {
+                    status: response.status,
+                    statusText: response.statusText,
+                    headers: response.headers
+                });
+            } catch (e) {
+                return response;
+            }
+        }
+        return response;
+    };
+
+    // =========================================================================
+    // 4. STRICT PRELOAD & BUFFER MANAGER
+    // =========================================================================
+    const originalPlay = HTMLVideoElement.prototype.play;
+    
+    HTMLVideoElement.prototype.play = function() {
+        this.preload = 'auto';
+        
+        if (this.readyState < 3) {
+            return new Promise((resolve, reject) => {
+                const playWhenReady = () => {
+                    this.removeEventListener('canplay', playWhenReady);
+                    this.removeEventListener('canplaythrough', playWhenReady);
+                    originalPlay.apply(this).then(resolve).catch(reject);
+                };
+                
+                this.addEventListener('canplaythrough', playWhenReady);
+                this.addEventListener('canplay', playWhenReady); 
+                this.load(); 
+            });
+        }
+        
+        return originalPlay.apply(this);
+    };
+
+    // =========================================================================
+    // 5. MAIN SCRIPT (Pure Canvas Engine + CSS Enforcement)
+    // =========================================================================
+    document.addEventListener("DOMContentLoaded", () => {
+        let currentPlaybackSpeed = 1;
+        let isMasterEnabled = true;
+        let globalMuteState = null;
+
+        // --- 5A. ENFORCED QUALITY CSS (From Max Quality Enforcer) ---
+        const qualityStyle = document.createElement('style');
+        qualityStyle.id = 'ig-max-quality-css';
+        qualityStyle.innerHTML = `
+            video {
+                filter: none !important;
+                image-rendering: high-quality !important;
+                -webkit-font-smoothing: antialiased !important;
+            }
+        `;
+        document.head.appendChild(qualityStyle);
+
+        // --- 5B. THE PURE CANVAS CSS (From Ultimate Nuke) ---
+        const globalStyle = document.createElement('style');
+        globalStyle.id = 'ig-global-override';
+        globalStyle.innerHTML = `
+            /* 1. ANNIHILATE ALL UI CLUTTER GLOBALLY */
+            nav, header, footer, [role="navigation"], [role="tablist"], [role="banner"], [role="progressbar"],
+            svg:not(#ig-control-panel svg), 
+            button:not(#ig-control-panel button), 
+            [role="button"]:not(#ig-control-panel [role="button"]),
+            img[alt*="profile" i], 
+            span, h1, h2, h3, p, time, marquee {
+                display: none !important;
+                opacity: 0 !important;
+                pointer-events: none !important;
+            }
+
+            /* 2. STRIP ALL PADDING, MARGINS, AND BACKGROUNDS */
+            html, body, #react-root, main, section, article {
+                background-color: #000 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                border: none !important;
+                box-shadow: none !important;
+            }
+
+            /* 3. FORCE POST CONTAINERS TO BE FULLSCREEN SNAP MODULES */
+            article {
+                width: 100vw !important;
+                height: 100dvh !important;
+                max-height: 100dvh !important;
+                position: relative !important;
+                overflow: hidden !important;
+                border: none !important;
+            }
+
+            /* 4. PROTECT OUR CONTROL PANEL */
+            #ig-control-panel, #ig-control-panel * {
+                display: flex !important;
+                opacity: 1 !important;
+                pointer-events: auto !important;
+                z-index: 999999 !important;
+            }
+        `;
+        document.head.appendChild(globalStyle);
+
+        // --- 5C. ASPECT RATIO MANAGER ---
+        const ratioStyle = document.createElement('style');
+        ratioStyle.id = 'ig-ratio-override';
+        document.head.appendChild(ratioStyle);
+
+        const modes = [
+            { name: "Mode: Auto", css: `article video, article img:not([alt*="profile" i]), main video, main img:not([alt*="profile" i]) { position: absolute !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100dvh !important; object-fit: cover !important; z-index: 99990 !important; background: #000 !important; border: none !important; }` },
+            { name: "Mode: Force Fill", css: `article video, article img:not([alt*="profile" i]), main video, main img:not([alt*="profile" i]) { position: absolute !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100dvh !important; object-fit: cover !important; z-index: 99990 !important; background: #000 !important; border: none !important; }` },
+            { name: "Mode: Original Size", css: `article video, article img:not([alt*="profile" i]), main video, main img:not([alt*="profile" i]) { position: absolute !important; top: 50% !important; left: 50% !important; transform: translate(-50%, -50%) !important; width: 100vw !important; height: auto !important; max-height: 100dvh !important; object-fit: contain !important; z-index: 99990 !important; background: transparent !important; border: none !important; }` }
+        ];
+
+        let currentMode = 1; 
+        ratioStyle.innerHTML = modes[currentMode].css; 
+
+        // --- 5D. BACKGROUND SPEED ENGINE & BLACK BOX FIXER ---
+        setInterval(() => {
+            if (!isMasterEnabled) return;
+            
+            document.querySelectorAll('video').forEach(video => {
+                if (video.playbackRate !== currentPlaybackSpeed) {
+                    video.playbackRate = currentPlaybackSpeed;
+                }
+                if (globalMuteState !== null && video.muted !== globalMuteState) {
+                    video.muted = globalMuteState;
+                }
+            });
+
+            document.querySelectorAll('article div, main div').forEach(div => {
+                if (!div.querySelector('video') && !div.querySelector('img')) {
+                    div.style.setProperty('background', 'transparent', 'important');
+                    div.style.setProperty('background-color', 'transparent', 'important');
+                }
+            });
+        }, 500);
+
+        // --- 5E. VIDEO TAP TO MUTE/UNMUTE ---
+        document.addEventListener('click', (e) => {
+            if (!isMasterEnabled) return;
+            if (e.target && e.target.tagName === 'VIDEO') {
+                globalMuteState = !e.target.muted;
+                document.querySelectorAll('video').forEach(video => {
+                    video.muted = globalMuteState;
+                });
+            }
+        });
+
+        // --- 5F. CREATE CONTROL PANEL ---
+        const panel = document.createElement('div');
+        panel.id = 'ig-control-panel';
+        panel.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:999999;display:flex;flex-direction:column;gap:12px;';
+
+        const btnBase = 'width:36px;height:36px;cursor:pointer;display:flex;align-items:center;justify-content:center;background:transparent;border:none;transition:all 0.2s ease;opacity:0.4;padding:0;outline:none;';
+        const btnHover = 'opacity:1;';
+
+        const toast = document.createElement('div');
+        toast.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%, -50%);background:rgba(0,0,0,0.8);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);color:white;padding:12px 24px;border-radius:30px;font-family:sans-serif;font-weight:bold;font-size:14px;z-index:1000000;opacity:0;pointer-events:none;transition:opacity 0.3s;';
+        document.body.appendChild(toast);
+
+        let toastTimeout;
+        const showToast = (msg, keepAlive = false) => {
+            toast.innerText = msg;
+            toast.style.opacity = '1';
+            clearTimeout(toastTimeout);
+            if (!keepAlive) toastTimeout = setTimeout(() => toast.style.opacity = '0', 2500);
+        };
+
+        // --- A. SAVE BUTTON (Popup Tab) ---
+        function extractShortcode(element) {
+            let node = element;
+            for (let i = 0; i < 15; i++) {
+                if (!node) break;
+                const reactKey = Object.keys(node).find(k => k.startsWith('__reactFiber$'));
+                if (reactKey) {
+                    let fiber = node[reactKey];
+                    for (let j = 0; j < 20; j++) {
+                        if (!fiber) break;
+                        if (fiber.memoizedProps) {
+                            const p = fiber.memoizedProps;
+                            if (p.post && p.post.shortcode) return p.post.shortcode;
+                            if (p.media && p.media.code) return p.media.code;
+                            if (p.xdt_shortcode) return p.xdt_shortcode;
+                            if (p.shortcode) return p.shortcode;
+                        }
+                        fiber = fiber.return;
+                    }
+                }
+                node = node.parentElement;
+            }
+            return null;
+        }
+
+        const saveBtn = document.createElement('button');
+        saveBtn.style.cssText = btnBase;
+        saveBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.9)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>`;
+        saveBtn.onmouseenter = () => saveBtn.style.cssText = btnBase + btnHover;
+        saveBtn.onmouseleave = () => saveBtn.style.cssText = btnBase;
+
+        saveBtn.onclick = () => {
+            const mediaElements = Array.from(document.querySelectorAll('video, img:not([alt*="profile" i])'));
+            let activeMedia = null;
+            let minDistance = Infinity;
+            const centerY = window.innerHeight / 2;
+
+            mediaElements.forEach(media => {
+                const rect = media.getBoundingClientRect();
+                if (rect.height === 0 || rect.width === 0) return; 
+                const mediaCenter = rect.top + rect.height / 2;
+                const distance = Math.abs(centerY - mediaCenter);
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    activeMedia = media;
+                }
+            });
+
+            if (activeMedia) {
+                saveBtn.style.transform = 'scale(0.8)';
+                setTimeout(() => saveBtn.style.transform = 'scale(1)', 150);
+
+                const postContainer = activeMedia.closest('article, [role="presentation"], main') || activeMedia.parentElement.parentElement;
+                
+                if (postContainer) {
+                    const svgs = postContainer.querySelectorAll('svg');
+                    let nativeClicked = false;
+                    
+                    for (let svg of svgs) {
+                        let label = (svg.getAttribute('aria-label') || '').trim();
+                        
+                        if (label === 'Save' || label === 'Remove') {
+                            const btn = svg.closest('button, [role="button"], a') || svg;
+                            btn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+                            btn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+                            btn.click();
+                            showToast(label === 'Remove' ? "Removed from Profile!" : "Saved to Profile!");
+                            nativeClicked = true;
+                            break;
+                        }
+                        
+                        const poly = svg.querySelector('polygon');
+                        const path = svg.querySelector('path');
+                        if ((poly && poly.getAttribute('points') && poly.getAttribute('points').includes('20 21 12')) || 
+                            (path && path.getAttribute('d') && path.getAttribute('d').includes('20 21 12'))) {
+                            const btn = svg.closest('button, [role="button"], a') || svg;
+                            btn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+                            btn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+                            btn.click();
+                            showToast("Bookmark Toggled!");
+                            nativeClicked = true;
+                            break;
+                        }
+                    }
+                    
+                    if (nativeClicked) return; 
+                }
+                
+                let shortcode = extractShortcode(activeMedia);
+
+                if (!shortcode) {
+                    let postContainer = activeMedia.closest('article, [role="presentation"], main') || activeMedia.parentElement.parentElement;
+                    let link = postContainer ? postContainer.querySelector('a[href*="/p/"], a[href*="/reel/"], a[href*="/reels/"]') : null;
+                    if (link) {
+                        const match = link.href.match(/\/(?:p|reel|reels)\/([^\/?]+)/);
+                        if (match) shortcode = match[1];
+                    }
+                }
+                
+                if (!shortcode) {
+                    const urlMatch = window.location.pathname.match(/\/(?:p|reel|reels)\/([^\/?]+)/);
+                    if (urlMatch) shortcode = urlMatch[1];
+                }
+
+                if (shortcode) {
+                    localStorage.removeItem('ig_bot_result');
+                    const botTab = window.open(`/p/${shortcode}/?auto_save_bot=true`, 'ig_bot_tab', 'width=100,height=100,left=-1000,top=-1000');
+                    if (!botTab) return showToast("Browser blocked popup! Allow popups for Via Browser.");
+
+                    showToast("Bot opening tab...", true);
+
+                    let checkAttempts = 0;
+                    const statusChecker = setInterval(() => {
+                        checkAttempts++;
+                        if (checkAttempts > 150) { 
+                            clearInterval(statusChecker);
+                            if (botTab && !botTab.closed) botTab.close();
+                            return showToast("Tab timeout: Connection too slow");
+                        }
+
+                        const result = localStorage.getItem('ig_bot_result');
+                        if (result) {
+                            clearInterval(statusChecker);
+                            localStorage.removeItem('ig_bot_result');
+                            if (botTab && !botTab.closed) botTab.close();
+                            
+                            if (result === 'saved') showToast("Saved to Profile!");
+                            else if (result === 'removed') showToast("Removed from Profile!");
+                            else if (result === 'toggled') showToast("Bookmark Toggled!");
+                            else showToast("Bot Error: Button missing in tab");
+                        }
+                    }, 100);
+                } else {
+                    showToast('Error: Cannot extract post URL');
+                }
+            } else {
+                showToast('No active post found on screen');
+            }
+        };
+        panel.appendChild(saveBtn);
+
+        // --- B. ASPECT RATIO BUTTON ---
+        const ratioBtn = document.createElement('button');
+        ratioBtn.style.cssText = btnBase;
+        ratioBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.9)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" x2="14" y1="3" y2="10"/><line x1="3" x2="10" y1="21" y2="14"/></svg>`;
+        ratioBtn.onmouseenter = () => ratioBtn.style.cssText = btnBase + btnHover;
+        ratioBtn.onmouseleave = () => ratioBtn.style.cssText = btnBase;
+
+        ratioBtn.onclick = () => {
+            currentMode = (currentMode + 1) % modes.length; 
+            ratioStyle.innerHTML = modes[currentMode].css;
+            ratioBtn.style.transform = 'scale(0.9)';
+            setTimeout(() => ratioBtn.style.transform = 'scale(1)', 150);
+            showToast(modes[currentMode].name);
+        };
+        panel.appendChild(ratioBtn);
+
+        // --- C. PLAYBACK SPEED BUTTON ---
+        const speedBtn = document.createElement('button');
+        speedBtn.style.cssText = btnBase + 'font-family:sans-serif;font-size:14px;font-weight:bold;color:rgba(255,255,255,0.9);text-shadow:0px 1px 3px rgba(0,0,0,0.8);';
+        speedBtn.innerText = '1x'; 
+        speedBtn.onmouseenter = () => speedBtn.style.opacity = '1';
+        speedBtn.onmouseleave = () => speedBtn.style.opacity = '0.4';
+
+        const speeds = [0.25, 0.5, 1, 2, 3];
+        let speedIdx = 2;
+
+        speedBtn.onclick = () => {
+            speedIdx = (speedIdx + 1) % speeds.length;
+            currentPlaybackSpeed = speeds[speedIdx];
+            speedBtn.innerText = currentPlaybackSpeed + 'x';
+            document.querySelectorAll('video').forEach(video => video.playbackRate = currentPlaybackSpeed);
+            speedBtn.style.transform = 'scale(0.9)';
+            setTimeout(() => speedBtn.style.transform = 'scale(1)', 150);
+            showToast(`Speed: ${currentPlaybackSpeed}x`);
+        };
+        panel.appendChild(speedBtn);
+
+        // --- D. MASTER TOGGLE BUTTON ---
+        const masterBtn = document.createElement('button');
+        masterBtn.style.cssText = btnBase;
+        masterBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.9)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>`;
+        
+        masterBtn.onmouseenter = () => { if (isMasterEnabled) masterBtn.style.cssText = btnBase + btnHover; };
+        masterBtn.onmouseleave = () => { if (isMasterEnabled) masterBtn.style.cssText = btnBase; };
+
+        masterBtn.onclick = () => {
+            isMasterEnabled = !isMasterEnabled;
+
+            if (!isMasterEnabled) {
+                globalStyle.disabled = true;
+                ratioStyle.disabled = true;
+                qualityStyle.disabled = true;
+
+                saveBtn.style.display = 'none';
+                ratioBtn.style.display = 'none';
+                speedBtn.style.display = 'none';
+
+                document.querySelectorAll('video').forEach(video => { video.playbackRate = 1; });
+
+                masterBtn.style.opacity = '1';
+                masterBtn.style.color = '#ff4444';
+                masterBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ff4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>`;
+                showToast('Normal Mode: ON');
+            } else {
+                globalStyle.disabled = false;
+                ratioStyle.disabled = false;
+                qualityStyle.disabled = false;
+
+                saveBtn.style.display = 'flex';
+                ratioBtn.style.display = 'flex';
+                speedBtn.style.display = 'flex';
+
+                document.querySelectorAll('video').forEach(video => { video.playbackRate = currentPlaybackSpeed; });
+
+                masterBtn.style.opacity = '0.4';
+                masterBtn.style.color = '';
+                masterBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.9)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>`;
+                showToast('Normal Mode: OFF');
+            }
+
+            masterBtn.style.transform = 'scale(0.9)';
+            setTimeout(() => masterBtn.style.transform = 'scale(1)', 150);
+        };
+        panel.appendChild(masterBtn);
+
+        document.body.appendChild(panel);
+    });
+})();

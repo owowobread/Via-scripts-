@@ -1,0 +1,206 @@
+// ==UserScript==
+// @name         Tango Ultimate Clean View (v16 - Toggle Follow & Zen Fix)
+// @namespace    http://tampermonkey.net/
+// @version      16.0
+// @description  Restored perfectly working Zen mode (removed canvas black boxes), added Follow/Unfollow toggle.
+// @author       Assistant
+// @match        *://*.tango.me/*
+// @grant        GM_addStyle
+// ==/UserScript==
+
+(function() {
+    'use strict';
+
+    // 1. CSS Injection
+    const css = `
+        #tango-ui {
+            position: fixed;
+            bottom: 150px; 
+            right: -195px; 
+            width: 195px;
+            display: flex;
+            align-items: center;
+            z-index: 2147483647 !important;
+            transition: right 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        #tango-ui.open { right: 0; }
+
+        /* Transparent Hitbox */
+        #tango-hitbox {
+            position: absolute;
+            left: -40px;
+            width: 40px;
+            height: 60px;
+            background: transparent !important;
+            border: none;
+            outline: none;
+            cursor: pointer;
+            color: #ffffff !important;
+            font-size: 24px !important;
+            font-weight: bold;
+            font-family: monospace;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-shadow: 0px 2px 4px rgba(0, 0, 0, 0.8);
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        #tango-menu {
+            display: flex;
+            background: rgba(15, 15, 20, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-radius: 30px 0 0 30px;
+            padding: 6px 12px 6px 8px;
+            box-shadow: -5px 5px 20px rgba(0, 0, 0, 0.4);
+        }
+
+        .tango-btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: none;
+            color: white;
+            font-size: 18px;
+            width: 42px;
+            height: 42px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            margin: 0 4px;
+            cursor: pointer;
+            outline: none;
+            transition: all 0.2s ease;
+        }
+
+        .btn-active { background: rgba(39, 174, 96, 0.4) !important; }
+
+        /* Clean View (Zen Mode) - REVERTED TO FLAWLESS VIDEO-ONLY TARGETING */
+        body.zen-mode * { visibility: hidden !important; pointer-events: none !important; }
+        body.zen-mode video, body.zen-mode #tango-ui, body.zen-mode #tango-ui * { visibility: visible !important; pointer-events: auto !important; }
+        body.zen-mode video {
+            position: fixed !important; top: 0 !important; left: 0 !important;
+            width: 100vw !important; height: 100vh !important;
+            z-index: 2147483645 !important; background-color: #000 !important;
+            object-fit: cover !important; cursor: pointer;
+        }
+    `;
+
+    const style = document.createElement('style');
+    style.type = 'text/css';
+    style.appendChild(document.createTextNode(css));
+    document.head.appendChild(style);
+
+    // 2. Build DOM
+    const ui = document.createElement('div');
+    ui.id = 'tango-ui';
+
+    const hitbox = document.createElement('button');
+    hitbox.id = 'tango-hitbox';
+    hitbox.innerHTML = '&lt;'; 
+
+    const menu = document.createElement('div');
+    menu.id = 'tango-menu';
+
+    const bypassBtn = document.createElement('button');
+    bypassBtn.className = 'tango-btn';
+    bypassBtn.innerHTML = '🔓';
+
+    const powerBtn = document.createElement('button');
+    powerBtn.className = 'tango-btn';
+    powerBtn.innerHTML = '👁️';
+
+    const followBtn = document.createElement('button');
+    followBtn.className = 'tango-btn';
+    followBtn.innerHTML = '👤';
+
+    menu.appendChild(bypassBtn);
+    menu.appendChild(powerBtn);
+    menu.appendChild(followBtn);
+    ui.appendChild(hitbox);
+    ui.appendChild(menu);
+    document.body.appendChild(ui);
+
+    // 3. Interactions
+    hitbox.addEventListener('click', (e) => {
+        e.stopPropagation();
+        ui.classList.toggle('open');
+    });
+
+    ['scroll', 'touchmove', 'wheel'].forEach(evt => {
+        window.addEventListener(evt, () => ui.classList.remove('open'), { capture: true, passive: true });
+    });
+
+    // 🔓 Overlay Nuke
+    bypassBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const keywords = ['vip', 'gift', 'join', 'collection'];
+
+        document.querySelectorAll('div').forEach(el => {
+            if (el.closest('#tango-ui')) return;
+            const style = window.getComputedStyle(el);
+            const text = (el.innerText || '').toLowerCase();
+            
+            if ((style.position === 'absolute' || style.position === 'fixed') && parseInt(style.zIndex) > 10) {
+                el.remove();
+            } else if (keywords.some(kw => text.includes(kw)) && text.length < 50) {
+                if (el.parentElement && el.parentElement.tagName !== 'BODY') el.parentElement.remove();
+            }
+        });
+
+        document.querySelectorAll('video').forEach(media => {
+            media.style.setProperty('z-index', '2147483645', 'important');
+            media.style.setProperty('visibility', 'visible', 'important');
+            media.style.setProperty('opacity', '1', 'important');
+        });
+        
+        bypassBtn.classList.add('btn-active');
+        setTimeout(() => bypassBtn.classList.remove('btn-active'), 1000);
+    });
+
+    // 👁️ Zen Mode
+    powerBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        powerBtn.classList.toggle('btn-active', document.body.classList.toggle('zen-mode'));
+    });
+
+    // 👤 Precision Follow / Unfollow Toggle
+    followBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        
+        // Targets both "follow" and "unfollow" test IDs, or any test ID containing "follow"
+        const target = document.querySelector('button[data-testid="follow"], button[data-testid="unfollow"], button[data-testid*="follow"]');
+        let triggered = false;
+
+        if (target) {
+            // Force React Props bypassing
+            const reactKey = Object.keys(target).find(k => k.startsWith('__reactProps'));
+            if (reactKey && typeof target[reactKey].onClick === 'function') {
+                try { 
+                    target[reactKey].onClick({ bubbles: true, cancelable: true }); 
+                    triggered = true;
+                } catch(err) {}
+            }
+
+            // Fallback to standard dispatch
+            if (!triggered) {
+                target.click();
+                triggered = true;
+            }
+        }
+
+        // UI Feedback
+        followBtn.classList.toggle('btn-active', triggered);
+        followBtn.innerHTML = triggered ? '✔️' : '❌';
+        setTimeout(() => { followBtn.classList.remove('btn-active'); followBtn.innerHTML = '👤'; }, 1500);
+    });
+
+    // 4. Global Mute Handler
+    document.addEventListener('click', (e) => {
+        if (e.target.closest('#tango-ui')) return;
+        const video = document.querySelector('video');
+        if (video) video.muted = !video.muted;
+    }, { capture: true }); 
+
+})();

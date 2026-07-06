@@ -1,0 +1,195 @@
+// ==UserScript==
+// @name         Organized AMOLED Wikipedia + Bottom Nav & Random
+// @namespace    http://viabrowser.com/
+// @version      1.4
+// @description  Pure black, Liberta 22px, true random button, auto-hiding bottom search/tabs.
+// @match        *://*.wikipedia.org/*
+// @grant        none
+// ==/UserScript==
+
+(function() {
+    'use strict';
+
+    const css = `
+        /* Hide unnecessary clutter (Removed header/search containers from this list) */
+        #mw-panel, 
+        #mw-navigation, 
+        #footer, 
+        #siteNotice, 
+        .mw-editsection, 
+        .navbox, 
+        .ambox, 
+        .vector-sidebar-container,
+        #p-personal,
+        #left-navigation,
+        #right-navigation {
+            display: none !important;
+        }
+
+        /* Pure AMOLED Black Background & Full Width Expansion */
+        html, body, #content, .mw-body, .mw-page-container, .mw-body-content {
+            background-color: #000000 !important;
+            margin: 0 !important;
+            padding: 5px !important; 
+            padding-bottom: 70px !important; /* Extra padding so bottom bar doesn't cover text at the very end */
+            width: 100% !important;
+            max-width: 100% !important;
+            box-sizing: border-box !important;
+            border: none !important;
+        }
+
+        /* Fix Wikipedia's default inner containers */
+        .content {
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+
+        /* Enforce Typography and AMOLED Text Contrast */
+        body, 
+        #content, 
+        .mw-body-content, 
+        p, 
+        li, 
+        div {
+            font-family: "Liberta", "Linux Libertine", "Times New Roman", serif !important;
+            font-size: 22px !important;
+            line-height: 1.7 !important;
+            color: #e0e0e0 !important; 
+        }
+
+        /* Heading Adjustments */
+        h1, h2, h3, h4, h5, h6 {
+            font-family: "Liberta", "Linux Libertine", "Times New Roman", serif !important;
+            color: #ffffff !important;
+            border-bottom: 1px solid #222222 !important;
+            padding-bottom: 5px !important;
+            margin-top: 1.5em !important;
+            background: transparent !important;
+        }
+        
+        h1 { font-size: 1.8em !important; }
+        h2 { font-size: 1.5em !important; }
+        h3 { font-size: 1.2em !important; }
+
+        /* Links */
+        a {
+            text-decoration: none !important;
+            color: #58a6ff !important; 
+        }
+        a:visited {
+            color: #8e65f3 !important; 
+        }
+
+        /* Infoboxes, Tables, and Image Thumbnails */
+        table, .infobox, .thumbinner, .toc, .wikitable {
+            background-color: #0a0a0a !important;
+            border: 1px solid #222222 !important;
+            color: #cccccc !important;
+            width: 100% !important;
+            box-sizing: border-box !important;
+        }
+        
+        th, td {
+            border: 1px solid #222222 !important;
+            background-color: transparent !important;
+        }
+
+        /* --- BOTTOM NAVIGATION BAR MODS --- */
+        .header-container, 
+        .minerva-header, 
+        .vector-header-container, 
+        .vector-sticky-header,
+        .page-actions-menu {
+            position: fixed !important;
+            top: auto !important;
+            bottom: 0 !important;
+            width: 100% !important;
+            background-color: #080808 !important;
+            border-top: 1px solid #222 !important;
+            border-bottom: none !important;
+            box-shadow: 0 -4px 10px rgba(0,0,0,0.8) !important;
+            z-index: 99998 !important;
+            transition: transform 0.3s ease-in-out !important;
+        }
+
+        /* AMOLED Search Inputs & Icons inside the bar */
+        input[type="search"], .search-box .search, .cdx-text-input__input {
+            background-color: #1a1a1a !important;
+            color: #ffffff !important;
+            border: 1px solid #333 !important;
+            border-radius: 20px !important;
+        }
+        .cdx-button, .minerva-icon {
+            filter: invert(1) hue-rotate(180deg) !important; /* Makes dark icons light for AMOLED */
+        }
+
+        /* Auto-hide class toggled by JS */
+        .nav-hidden {
+            transform: translateY(100%) !important;
+        }
+
+        /* Custom Random Button (Moved up to avoid overlapping the bottom bar) */
+        #true-random-fab {
+            position: fixed;
+            bottom: 80px; 
+            right: 20px;
+            width: 50px;
+            height: 50px;
+            background-color: #1a1a1a;
+            border: 2px solid #333;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.8);
+            cursor: pointer;
+            z-index: 99999;
+            user-select: none;
+            transition: background-color 0.2s, transform 0.3s ease-in-out;
+        }
+        #true-random-fab:active {
+            background-color: #333;
+        }
+        .fab-hidden {
+            transform: scale(0) !important; /* Shrinks away when scrolling down */
+        }
+    `;
+
+    // Inject CSS
+    const style = document.createElement('style');
+    style.innerHTML = css;
+    document.head.appendChild(style);
+
+    // Create Random Button
+    const fab = document.createElement('div');
+    fab.id = 'true-random-fab';
+    fab.innerHTML = '🎲'; 
+    fab.title = "Read a random article";
+    fab.addEventListener('click', () => {
+        window.location.href = 'https://en.wikipedia.org/wiki/Special:Random';
+    });
+    document.body.appendChild(fab);
+
+    // Scroll Logic for Auto-Hiding the Bottom Nav & FAB
+    let lastScrollTop = 0;
+    
+    window.addEventListener('scroll', function() {
+        let scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+        
+        // Target Wikipedia's native headers based on Mobile (Minerva) or Desktop (Vector) skins
+        const headers = document.querySelectorAll('.header-container, .minerva-header, .vector-header-container, .vector-sticky-header, .page-actions-menu');
+        
+        if (scrollTop > lastScrollTop && scrollTop > 50) {
+            // Scrolling Down
+            headers.forEach(h => h.classList.add('nav-hidden'));
+            fab.classList.add('fab-hidden');
+        } else {
+            // Scrolling Up
+            headers.forEach(h => h.classList.remove('nav-hidden'));
+            fab.classList.remove('fab-hidden');
+        }
+        lastScrollTop = scrollTop <= 0 ? 0 : scrollTop;
+    }, false);
+
+})();

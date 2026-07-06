@@ -1,0 +1,285 @@
+// ==UserScript==
+// @name         Absolute Binary AMOLED (No Loopholes)
+// @namespace    https://viabrowser.com/
+// @version      6.1.7
+// @description  Forces 100% Black & White. Fixes AI double-box glitch (strict CSS targeting). Forces top navigation bar to solid AMOLED black.
+// @author       Gemini
+// @match        *://*/*
+// @grant        none
+// @run-at       document-start
+// ==/UserScript==
+
+(function() {
+    'use strict';
+
+    // -------------------------------------------------------------------------
+    // 1. THE IRONCLAD CSS
+    // -------------------------------------------------------------------------
+    const injectCSS = () => {
+        if (document.getElementById('absolute-binary-css')) return;
+
+        const style = document.createElement('style');
+        style.id = 'absolute-binary-css';
+        style.textContent = `
+            /* 1. Force Root Variables */
+            :root, body, html {
+                --bg: #000000 !important;
+                --background: #000000 !important;
+                --text: #ffffff !important;
+                --color: #ffffff !important;
+                color-scheme: dark !important;
+            }
+
+            * {
+                color: #ffffff !important;
+                -webkit-text-fill-color: #ffffff !important;
+                text-shadow: none !important;
+                box-shadow: none !important;
+                mix-blend-mode: normal !important; 
+            }
+
+            /* 2. Structural Backgrounds */
+            :is(html, body, section, article, main, header, footer, nav, aside, table, ul, dialog, menu) {
+                background-color: #000000 !important;
+            }
+
+            /* 3. Kill Pseudo-element backgrounds */
+            *:before, *:after {
+                background-color: transparent !important;
+                background-image: none !important;
+                box-shadow: none !important;
+            }
+
+            /* 4. Keep Inputs/Borders strictly White & Opaque */
+            hr { border-color: #ffffff !important; background-color: #ffffff !important; }
+            a { color: #ffffff !important; text-decoration: none !important; }
+            p a { text-decoration: underline !important; text-decoration-color: #ffffff !important; }
+            
+            button, [role="button"], .btn { background-color: transparent !important; }
+            
+            /* =====================================================================
+               5. NAVIGATION BAR FIX (All, Images, Videos, News, Forums)
+               ===================================================================== */
+            nav, [role="navigation"], header, #hdtb, .crJ18e, .T47uwc {
+                background-color: #000000 !important;
+                background-image: none !important;
+                border: none !important;
+            }
+            
+            /* =====================================================================
+               6. SEARCH & AI "ASK ANYTHING" BOX OBLITERATOR (SINGLE AMOLED PILL)
+               ===================================================================== */
+            
+            /* A. Block Background Bleed */
+            div[style*="position: fixed"], 
+            div[style*="position: sticky"],
+            form:has(textarea),
+            #botstuff div {
+                background-color: #000000 !important;
+                backdrop-filter: none !important;
+                -webkit-backdrop-filter: none !important;
+            }
+
+            /* B. TOP SEARCH PILL: Outer wrapper gets the border, inner elements are stripped */
+            .RNNXgb, 
+            form[role="search"] > div:first-child {
+                background-color: #000000 !important;
+                border: 1px solid #ffffff !important;
+                border-radius: 28px !important; 
+                opacity: 1 !important;
+            }
+            .RNNXgb *, 
+            form[role="search"] > div:first-child * {
+                border: none !important;
+                background-color: transparent !important;
+                background-image: none !important;
+                outline: none !important;
+            }
+
+            /* C. BOTTOM AI PILL: Target ONLY the first wrapper inside the AI form to be the boundary */
+            form:has(textarea[placeholder*="ask" i]) > div:first-child,
+            form:has(textarea[aria-label*="ask" i]) > div:first-child,
+            form:has(textarea[jsname]) > div:first-child {
+                background-color: #000000 !important;
+                border: 1px solid #ffffff !important;
+                border-radius: 28px !important;
+                opacity: 1 !important;
+            }
+            /* Nuke EVERY border/background inside that wrapper to absolutely prevent the double box */
+            form:has(textarea[placeholder*="ask" i]) > div:first-child *,
+            form:has(textarea[aria-label*="ask" i]) > div:first-child *,
+            form:has(textarea[jsname]) > div:first-child * {
+                border: none !important;
+                background-color: transparent !important;
+                background-image: none !important;
+                outline: none !important;
+            }
+
+            /* D. INPUT TEXT */
+            textarea, 
+            input[type="search"], 
+            input[type="text"],
+            input[name="q"], 
+            .gLFyf, 
+            .gsfi {
+                color: #ffffff !important;
+                -webkit-text-fill-color: #ffffff !important;
+            }
+
+            /* E. Placeholder text forced to solid white */
+            textarea::placeholder, 
+            input::placeholder,
+            *::placeholder { 
+                color: #ffffff !important; 
+                opacity: 0.8 !important; 
+                -webkit-text-fill-color: #ffffff !important; 
+            }
+
+            /* F. Generic fallback for standard web forms */
+            input:not([type="hidden"]):not([type="radio"]):not([type="checkbox"]):not([type="search"]):not([type="text"]):not([name="q"]):not([placeholder*="ask" i]), 
+            textarea:not([jsname]):not([placeholder*="ask" i]), 
+            select {
+                background-color: #000000 !important;
+                border: 1px solid rgba(255, 255, 255, 0.4) !important;
+                border-radius: 8px !important; 
+            }
+
+            /* 7. Force SVGs White */
+            svg, path, polygon, rect, line, circle, .material-icons, .fa {
+                fill: #ffffff !important;
+                stroke: #ffffff !important;
+                color: #ffffff !important;
+            }
+            svg[fill="none"], svg [fill="none"] { fill: none !important; }
+
+            /* 8. STRICT MEDIA PROTECTION */
+            img, video, canvas, iframe, embed, object, map, webgl, g-img, picture, figure, source {
+                background-color: transparent !important;
+                border: none !important;
+                -webkit-text-fill-color: initial !important; 
+            }
+            
+            /* 9. Scrollbars */
+            ::-webkit-scrollbar { width: 4px !important; height: 4px !important; background: #000000 !important; }
+            ::-webkit-scrollbar-track { background: #000000 !important; }
+            ::-webkit-scrollbar-thumb { background: #ffffff !important; border-radius: 10px !important; }
+        `;
+        
+        const target = document.head || document.documentElement;
+        if (target) {
+            target.appendChild(style);
+        }
+    };
+
+    // -------------------------------------------------------------------------
+    // 2. THE JAVASCRIPT ENFORCER
+    // -------------------------------------------------------------------------
+    const IGNORE_TAGS = new Set(['IMG', 'VIDEO', 'CANVAS', 'IFRAME', 'SVG', 'PATH', 'OBJECT', 'EMBED', 'G-IMG', 'PICTURE', 'FIGURE', 'SOURCE']);
+
+    const enforceStrictColors = (el) => {
+        if (IGNORE_TAGS.has(el.tagName)) return;
+
+        const style = window.getComputedStyle(el);
+        
+        // 1. Force Text Color immediately
+        if (style.color !== 'rgb(255, 255, 255)') {
+            el.style.setProperty('color', '#ffffff', 'important');
+        }
+        if (style.webkitTextFillColor !== 'rgb(255, 255, 255)') {
+            el.style.setProperty('-webkit-text-fill-color', '#ffffff', 'important');
+        }
+
+        // =====================================================================
+        // CRITICAL FIX: STOP JS FROM FIGHTING CSS IN THE AI/SEARCH BOXES
+        // =====================================================================
+        // If this element is inside the AI or Search Form, halt background/border 
+        // JS enforcement. This stops JS from accidentally un-hiding inner borders, 
+        // which was causing the "double box" glitch. The CSS handles the pill perfectly.
+        const isInsideAIForm = el.closest && el.closest('form:has(textarea), form[role="search"], .RNNXgb');
+        if (isInsideAIForm) {
+            return; 
+        }
+
+        // =====================================================================
+        // Standard Background & Border Enforcement for everything else
+        // =====================================================================
+        const bgStr = style.backgroundColor;
+        const bgImg = style.backgroundImage;
+
+        let alpha = 1;
+        if (bgStr === 'transparent' || bgStr === 'rgba(0, 0, 0, 0)') {
+            alpha = 0;
+        } else if (bgStr.startsWith('rgba')) {
+            const parts = bgStr.replace(/[^\d.,]/g, '').split(',');
+            if (parts.length === 4) {
+                alpha = parseFloat(parts[3]);
+            }
+        }
+
+        const isFixedOrSticky = style.position === 'fixed' || style.position === 'sticky';
+        const hasBackdrop = style.backdropFilter !== 'none' || style.webkitBackdropFilter !== 'none';
+        
+        // Ensure Nav wrappers are caught by JS in case Google uses late-loading grey colors
+        const isNav = el.closest && (el.closest('nav') || el.closest('[role="navigation"]') || el.closest('header'));
+
+        // Force sticky/floating panels & Nav bars to solid AMOLED black
+        if (alpha >= 0.5 || (isFixedOrSticky && (alpha > 0 || hasBackdrop)) || isNav) {
+            el.style.setProperty('background-color', '#000000', 'important');
+            if (hasBackdrop) {
+                el.style.setProperty('backdrop-filter', 'none', 'important');
+                el.style.setProperty('-webkit-backdrop-filter', 'none', 'important');
+            }
+        } else if (alpha > 0) {
+            el.style.setProperty('background-color', 'transparent', 'important');
+        }
+
+        if (bgImg !== 'none' && !bgImg.includes('url(')) {
+            el.style.setProperty('background-image', 'none', 'important');
+        }
+
+        if (style.borderStyle !== 'none' && style.borderWidth !== '0px') {
+            el.style.setProperty('border-color', '#ffffff', 'important');
+        }
+    };
+
+    // -------------------------------------------------------------------------
+    // 3. OBSERVERS & INSTANT INITIALIZATION
+    // -------------------------------------------------------------------------
+    const viewportObserver = new IntersectionObserver((entries, observer) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                enforceStrictColors(entry.target);
+                observer.unobserve(entry.target);
+            }
+        });
+    }, { root: null, rootMargin: '300px', threshold: 0 });
+
+    const domObserver = new MutationObserver((mutations) => {
+        requestAnimationFrame(() => {
+            mutations.forEach(mutation => {
+                mutation.addedNodes.forEach(node => {
+                    if (node.nodeType === 1) {
+                        viewportObserver.observe(node);
+                        node.querySelectorAll('*').forEach(child => viewportObserver.observe(child));
+                    }
+                });
+            });
+        });
+    });
+
+    injectCSS();
+
+    if (document.documentElement) {
+        domObserver.observe(document.documentElement, { childList: true, subtree: true });
+    } else {
+        const rootObserver = new MutationObserver(() => {
+            if (document.documentElement) {
+                injectCSS(); 
+                domObserver.observe(document.documentElement, { childList: true, subtree: true });
+                rootObserver.disconnect();
+            }
+        });
+        rootObserver.observe(document, { childList: true });
+    }
+
+})();

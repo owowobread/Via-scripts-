@@ -1,0 +1,606 @@
+// ==UserScript==
+// @name         Pinterest Ultimate Nuke v24 (The GIF Engine & Sync) - Modified
+// @namespace    https://viayoo.com/
+// @version      24.1.0
+// @description  Forces videos to behave as native GIFs. Ghost API Saving. Transparent UI. Syncs scroll & refresh with native background. Added Home Button and Instant Transparent Toast.
+// @author       You
+// @run-at       document-start
+// @match        https://*.pinterest.com/*
+// @match        https://*.pinterest.ca/*
+// @match        https://*.pinterest.co.uk/*
+// @match        https://*.pinterest.com.au/*
+// @grant        none
+// ==/UserScript==
+
+(function() {
+    'use strict';
+
+    // =========================================================================
+    // 0. KILL ADAPTIVE STREAMING ENGINE
+    // =========================================================================
+    try {
+        Object.defineProperty(window, 'MediaSource', { get: () => undefined });
+        Object.defineProperty(window, 'WebKitMediaSource', { get: () => undefined });
+    } catch (e) {}
+
+    if (window.__pinNukeInitialized) return;
+    window.__pinNukeInitialized = true;
+
+    document.addEventListener("DOMContentLoaded", () => {
+        // --- TARGET BOARD CONFIGURATION ---
+        const TARGET_BOARD_URL = "https://in.pinterest.com/maddyisthegame/kdkdkf/";
+        
+        let isMasterEnabled = localStorage.getItem('pin_nuke_master_state') !== 'false'; 
+        let isAutoScrollEnabled = localStorage.getItem('pin_nuke_autoscroll') === 'true';
+        
+        let currentMode = 0; 
+        localStorage.setItem('pin_nuke_fit_mode', '0'); 
+        
+        let panelOpen = false;
+
+        // --- 1. FORCE PORTRAIT & OS DARK MODE ---
+        [{ name: "screen-orientation", content: "portrait" },
+         { name: "x5-orientation", content: "portrait" },
+         { name: "orientation", content: "portrait" },
+         { name: "theme-color", content: "#000000" },
+         { name: "color-scheme", content: "dark" }].forEach(m => {
+            let meta = document.createElement('meta');
+            meta.name = m.name;
+            meta.content = m.content;
+            document.head.appendChild(meta);
+        });
+
+        // --- 2. THE DUAL-DOM ENGINE CSS ---
+        const globalStyle = document.createElement('style');
+        document.head.appendChild(globalStyle);
+        
+        const panelStyle = document.createElement('style');
+        panelStyle.innerHTML = `
+            #pin-control-panel button svg {
+                filter: drop-shadow(0px 1px 3px rgba(0,0,0,0.8)) !important;
+            }
+            #pin-control-panel button svg *,
+            #pin-control-panel button svg path,
+            #pin-control-panel button svg polyline,
+            #pin-control-panel button svg line,
+            #pin-control-panel button svg rect {
+                fill: none !important;
+                stroke: #ffffff !important;
+                stroke-width: 2 !important;
+            }
+        `;
+        document.head.appendChild(panelStyle);
+        
+        const updateMasterCSS = () => {
+            if (isMasterEnabled) {
+                globalStyle.innerHTML = `
+                    body > *:not(#pin-nuke-feed):not(#pin-control-panel):not(#pin-toast) {
+                        opacity: 0.001 !important; pointer-events: none !important;
+                    }
+                    body, html { background-color: #000000 !important; margin: 0 !important; padding: 0 !important; }
+                    
+                    #pin-nuke-feed {
+                        position: fixed !important; top: 0 !important; left: 0 !important;
+                        width: 100vw !important; height: 100dvh !important;
+                        background: #000000 !important; z-index: 999990 !important;
+                        overflow-y: auto !important; overflow-x: hidden !important;
+                        scroll-snap-type: y mandatory !important; scroll-behavior: smooth !important;
+                        scrollbar-width: none !important; 
+                        -ms-overflow-style: none !important; 
+                    }
+                    #pin-nuke-feed::-webkit-scrollbar {
+                        display: none !important;
+                    }
+                    .nuke-block {
+                        position: relative !important; width: 100vw !important; height: 100dvh !important;
+                        scroll-snap-align: start !important; scroll-snap-stop: always !important;
+                        display: flex !important; justify-content: center !important; align-items: center !important;
+                        background: #000000 !important;
+                    }
+                    .nuke-media {
+                        width: 100vw !important; height: 100dvh !important;
+                        max-width: 100vw !important; max-height: 100dvh !important;
+                        background: #000000 !important;
+                        pointer-events: none !important; 
+                    }
+                `;
+            } else {
+                globalStyle.innerHTML = `#pin-nuke-feed { display: none !important; }`;
+            }
+            updateObjectFit();
+        };
+
+        // --- 3. HARVESTER & GIF ENGINE ---
+        const feed = document.createElement('div');
+        feed.id = 'pin-nuke-feed';
+        document.body.appendChild(feed);
+
+        const seenMedia = new Set();
+        let harvestedCount = 0;
+
+        const harvest = () => {
+            if (!isMasterEnabled) return;
+            document.querySelectorAll('img[src*="pinimg.com"], video').forEach(el => {
+                
+                let rawSrc = '';
+                if (el.tagName === 'VIDEO') {
+                    const source = el.querySelector('source[type="video/mp4"]');
+                    rawSrc = source ? source.src : (el.currentSrc || el.src);
+                } else {
+                    rawSrc = el.src;
+                }
+                
+                if (!rawSrc || rawSrc.length < 15 || rawSrc.includes('/75x75/') || rawSrc.includes('/150x150/') || rawSrc.includes('.svg') || rawSrc.includes('profile') || rawSrc.includes('avatar')) return;
+                
+                let hashMatch = rawSrc.match(/\/([a-fA-F0-9]{12,})\./i);
+                let uniqueId = hashMatch ? hashMatch[1] : rawSrc;
+
+                if (!seenMedia.has(uniqueId)) {
+                    seenMedia.add(uniqueId);
+                    harvestedCount++;
+                    
+                    let pinId = null;
+                    const link = el.closest('a[href*="/pin/"]');
+                    if (link) {
+                        const match = link.href.match(/\/pin\/(\d+)/);
+                        if (match) pinId = match[1];
+                    }
+
+                    const block = document.createElement('div');
+                    block.className = 'nuke-block';
+                    if (pinId) block.setAttribute('data-pin-id', pinId);
+                    
+                    let nukeMedia;
+                    if (el.tagName === 'VIDEO') {
+                        nukeMedia = document.createElement('video');
+                        nukeMedia.src = rawSrc;
+                        nukeMedia.className = 'nuke-media';
+                        nukeMedia.loop = true; 
+                        nukeMedia.muted = true; 
+                        nukeMedia.defaultMuted = true;
+                        nukeMedia.autoplay = true;
+                        nukeMedia.setAttribute('playsinline', 'true');
+                        nukeMedia.setAttribute('webkit-playsinline', 'true');
+                        nukeMedia.setAttribute('preload', 'auto');
+                        nukeMedia.setAttribute('autoplay', 'autoplay'); 
+                        
+                        el.muted = true;
+                        el.pause();
+                    } else {
+                        nukeMedia = document.createElement('img');
+                        nukeMedia.className = 'nuke-media';
+                        if (rawSrc.match(/\/(236x|474x|736x)\//)) {
+                            nukeMedia.src = rawSrc.replace(/\/(236x|474x|736x)\//, '/originals/'); 
+                        } else {
+                            nukeMedia.src = rawSrc;
+                        }
+
+                        nukeMedia.onerror = () => {
+                            if (nukeMedia.src.includes('/originals/')) {
+                                nukeMedia.src = rawSrc.replace(/\/(236x|474x|originals)\//, '/736x/');
+                            } else if (nukeMedia.src.includes('/736x/')) {
+                                nukeMedia.src = rawSrc;
+                            } else {
+                                block.style.display = 'none';
+                            }
+                        };
+                    }
+                    
+                    block.appendChild(nukeMedia);
+                    feed.appendChild(block);
+                }
+            });
+        };
+
+        const getActiveBlock = () => {
+            const blocks = Array.from(feed.querySelectorAll('.nuke-block'));
+            let active = null;
+            let minDistance = Infinity;
+            const centerY = window.innerHeight / 2;
+            blocks.forEach(block => {
+                const center = block.getBoundingClientRect().top + block.getBoundingClientRect().height / 2;
+                const dist = Math.abs(centerY - center);
+                if (dist < minDistance) { minDistance = dist; active = block; }
+            });
+            return active;
+        };
+
+        const syncNativeScroll = () => {
+            const active = getActiveBlock();
+            if (active) {
+                const pinId = active.getAttribute('data-pin-id');
+                if (pinId) {
+                    const nativeEl = document.querySelector(`a[href*="/pin/${pinId}"]`);
+                    if (nativeEl) {
+                        nativeEl.scrollIntoView({ behavior: 'instant', block: 'center' });
+                    }
+                }
+            }
+        };
+
+        setInterval(() => {
+            if (!isMasterEnabled) return;
+            const activeBlock = getActiveBlock();
+            if (activeBlock) {
+                const blocks = Array.from(feed.querySelectorAll('.nuke-block'));
+                const activeIndex = blocks.indexOf(activeBlock);
+                if (harvestedCount - activeIndex < 15) {
+                    window.scrollBy({ top: 800, behavior: 'smooth' }); 
+                } else {
+                    syncNativeScroll();
+                }
+            } else if (harvestedCount < 10) {
+                window.scrollBy({ top: 500, behavior: 'smooth' });
+            }
+        }, 600);
+
+        setInterval(harvest, 400);
+
+        // --- 4. GHOST API INTERACTION LAYER ---
+        const getBoardId = async () => {
+            let cached = localStorage.getItem('pin_nuke_target_board_id');
+            if (cached) return cached;
+            
+            try {
+                const res = await fetch(TARGET_BOARD_URL);
+                const text = await res.text();
+                const match = text.match(/"board_id":"(\d+)"/) || 
+                              text.match(/"id":"(\d+)","url":"\/maddyisthegame\/kdkdkf\/"/i) ||
+                              text.match(/"board":{"id":"(\d+)"/);
+                
+                if (match && match[1]) {
+                    localStorage.setItem('pin_nuke_target_board_id', match[1]);
+                    return match[1];
+                }
+                throw new Error("Failed to extract board ID");
+            } catch (e) {
+                return null;
+            }
+        };
+
+        const apiSavePin = async (pinId) => {
+            try {
+                const boardId = await getBoardId();
+                if (!boardId) return { success: false, msg: "Board URL invalid or private" };
+
+                const csrfMatch = document.cookie.match(/csrftoken=([^;]+)/);
+                if (!csrfMatch) return { success: false, msg: "Authentication token missing" };
+                const csrfToken = csrfMatch[1];
+
+                const data = { options: { board_id: boardId, pin_id: pinId }, context: {} };
+                const body = `source_url=/pin/${pinId}/&data=${encodeURIComponent(JSON.stringify(data))}`;
+
+                const res = await fetch('/resource/SavePinResource/create/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-CSRFToken': csrfToken,
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json, text/javascript, */*; q=0.01'
+                    },
+                    body: body
+                });
+
+                if (!res.ok) {
+                    const res2 = await fetch('/resource/RepinResource/create/', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                            'X-CSRFToken': csrfToken,
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'Accept': 'application/json, text/javascript, */*; q=0.01'
+                        },
+                        body: body
+                    });
+                    if (!res2.ok) return { success: false, msg: "API rejected request" };
+                    const json2 = await res2.json();
+                    if (json2.resource_response && json2.resource_response.error) return { success: false, msg: "Already saved in board!" };
+                    return { success: true, msg: "Saved to kdkdkf!" };
+                }
+
+                const json = await res.json();
+                if (json.resource_response && json.resource_response.error) {
+                    return { success: false, msg: "Already saved in board!" };
+                }
+
+                return { success: true, msg: "Saved to kdkdkf!" };
+            } catch (err) {
+                return { success: false, msg: "Network error occurred" };
+            }
+        };
+
+        // --- 5. INTERACTION & DOUBLE-TAP LOGIC ---
+        const updateObjectFit = () => {
+            const fit = currentMode === 0 ? 'cover' : 'contain';
+            document.querySelectorAll('.nuke-media').forEach(media => {
+                media.style.setProperty('object-fit', fit, 'important');
+            });
+        };
+
+        let tapTimeout;
+        let lastTapTime = 0;
+
+        feed.addEventListener('click', async (e) => {
+            const block = e.target.closest('.nuke-block');
+            if (block) {
+                const now = Date.now();
+                const timeDiff = now - lastTapTime;
+                lastTapTime = now;
+                
+                if (timeDiff < 300 && timeDiff > 0) {
+                    clearTimeout(tapTimeout); 
+                    const pinId = block.getAttribute('data-pin-id');
+                    
+                    if (pinId) {
+                        const icon = document.createElement('div');
+                        icon.innerHTML = `<svg width="80" height="80" viewBox="0 0 24 24" fill="#e60023" stroke="#e60023" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>`;
+                        icon.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%, -50%) scale(0);transition:transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);z-index:999999;pointer-events:none;';
+                        block.appendChild(icon);
+                        setTimeout(() => icon.style.transform = 'translate(-50%, -50%) scale(1.5)', 50);
+                        setTimeout(() => icon.style.transform = 'translate(-50%, -50%) scale(0)', 800);
+                        setTimeout(() => icon.remove(), 1200);
+
+                        showToast("Saving...", true);
+                        const result = await apiSavePin(pinId);
+                        showToast(result.msg);
+                    } else {
+                        showToast('Error: No Pin ID found');
+                    }
+                } else {
+                    tapTimeout = setTimeout(() => {
+                        currentMode = (currentMode + 1) % 2;
+                        localStorage.setItem('pin_nuke_fit_mode', currentMode);
+                        updateObjectFit();
+                        showToast(currentMode === 0 ? 'Mode: Cover Fill' : 'Mode: Original Fit');
+                    }, 300);
+                }
+            }
+        });
+
+        // --- 6. STEALTH SCROLL UI ---
+        let scrollTimeout;
+        const closeMenuOnScroll = () => {
+            if (panelOpen) { 
+                panelOpen = false; 
+                panel.style.transform = 'translateX(calc(100% - 30px))';
+                slideTab.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>`;
+            }
+            
+            panel.style.opacity = '0';
+            panel.style.pointerEvents = 'none';
+            
+            clearTimeout(scrollTimeout);
+            scrollTimeout = setTimeout(() => {
+                panel.style.opacity = '1';
+                panel.style.pointerEvents = 'auto';
+            }, 500); 
+        };
+
+        feed.addEventListener('scroll', closeMenuOnScroll, { capture: true, passive: true });
+        feed.addEventListener('touchmove', closeMenuOnScroll, { capture: true, passive: true });
+        window.addEventListener('wheel', closeMenuOnScroll, { capture: true, passive: true });
+
+        // --- 7. CONTROL PANEL UI ---
+        const panel = document.createElement('figure');
+        panel.id = 'pin-control-panel'; 
+        panel.style.cssText = 'margin:0;padding:0;position:fixed;bottom:20px;right:0;display:flex;align-items:center;z-index:9999999;transition:transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;transform:translateX(calc(100% - 30px));opacity:1; background: transparent !important; background-color: transparent !important; box-shadow: none !important; border: none !important;';
+
+        const chevronLeft = `<svg width="20" height="20" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>`;
+        const chevronRight = `<svg width="20" height="20" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"></polyline></svg>`;
+
+        const slideTab = document.createElement('button');
+        slideTab.style.cssText = 'width:30px;height:60px;background:transparent !important;border:none !important;cursor:pointer;display:flex;justify-content:center;align-items:center;padding:0;outline:none;box-shadow:none !important;-webkit-appearance:none;-webkit-tap-highlight-color:transparent;margin-right:-1px;';
+        slideTab.innerHTML = chevronLeft;
+
+        const contentBox = document.createElement('figure');
+        contentBox.style.cssText = 'margin:0;display:flex;flex-direction:column;align-items:center;gap:16px;background:transparent !important;border:none !important;padding:16px;box-shadow:none !important;';
+
+        const menuTray = document.createElement('figure');
+        menuTray.style.cssText = 'margin:0;padding:0;display:grid;grid-template-columns:repeat(2, 40px);gap:12px;';
+
+        const btnBase = 'width:40px;height:40px;border-radius:50%;border:none;background:transparent;cursor:pointer;display:flex;justify-content:center;align-items:center;transition:all 0.2s ease;padding:0;outline:none;-webkit-appearance:none;-webkit-tap-highlight-color:transparent;';
+        const btnHover = 'background:rgba(255,255,255,0.15);transform:scale(1.05);';
+
+        const toast = document.createElement('div');
+        toast.id = 'pin-toast';
+        // MODIFIED: Transparent background, text shadow for readability, removed CSS transition for instant vanishing
+        toast.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%, -50%);background:transparent;padding:12px 24px;font-family:sans-serif;font-weight:bold;font-size:18px;color:#fff;text-shadow:0px 2px 5px rgba(0,0,0,1);z-index:1000000;opacity:0;pointer-events:none;';
+        document.body.appendChild(toast);
+        
+        let toastTimeout;
+        const showToast = (msg, keepAlive = false) => {
+            toast.innerText = msg;
+            toast.style.setProperty('opacity', '1', 'important');
+            clearTimeout(toastTimeout);
+            // MODIFIED: Extremely short timeout (400ms) for an instant flash before vanishing completely.
+            if (!keepAlive) toastTimeout = setTimeout(() => { toast.style.setProperty('opacity', '0', 'important'); }, 400);
+        };
+
+        // NEW: Home Button Implementation
+        const homeBtn = document.createElement('button');
+        homeBtn.style.cssText = btnBase;
+        homeBtn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>`;
+        homeBtn.onmouseenter = () => homeBtn.style.cssText = btnBase + btnHover;
+        homeBtn.onmouseleave = () => homeBtn.style.cssText = btnBase;
+        homeBtn.onclick = () => {
+            homeBtn.style.transform = 'scale(0.8)';
+            setTimeout(() => homeBtn.style.transform = 'scale(1)', 150);
+            window.location.href = '/'; 
+        };
+
+        const saveBtn = document.createElement('button');
+        saveBtn.style.cssText = btnBase;
+        saveBtn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>`;
+        saveBtn.onmouseenter = () => saveBtn.style.cssText = btnBase + btnHover;
+        saveBtn.onmouseleave = () => saveBtn.style.cssText = btnBase;
+        saveBtn.onclick = async () => {
+            saveBtn.style.transform = 'scale(0.8)';
+            setTimeout(() => saveBtn.style.transform = 'scale(1)', 150);
+            const active = getActiveBlock();
+            if (active) {
+                const pinId = active.getAttribute('data-pin-id');
+                if (pinId) {
+                    showToast("Saving...", true);
+                    const result = await apiSavePin(pinId);
+                    showToast(result.msg);
+                } else {
+                    showToast("Error: No Pin ID found.");
+                }
+            } else { showToast("No media in view."); }
+        };
+
+        const boardBtn = document.createElement('button');
+        boardBtn.style.cssText = btnBase;
+        boardBtn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>`;
+        boardBtn.onmouseenter = () => boardBtn.style.cssText = btnBase + btnHover;
+        boardBtn.onmouseleave = () => boardBtn.style.cssText = btnBase;
+        boardBtn.onclick = () => {
+            boardBtn.style.transform = 'scale(0.8)';
+            setTimeout(() => boardBtn.style.transform = 'scale(1)', 150);
+            window.open(TARGET_BOARD_URL, '_blank');
+        };
+
+        const aspectRatioBtn = document.createElement('button');
+        aspectRatioBtn.style.cssText = btnBase;
+        aspectRatioBtn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg>`;
+        aspectRatioBtn.onmouseenter = () => aspectRatioBtn.style.cssText = btnBase + btnHover;
+        aspectRatioBtn.onmouseleave = () => aspectRatioBtn.style.cssText = btnBase;
+        aspectRatioBtn.onclick = () => {
+            currentMode = (currentMode + 1) % 2; 
+            localStorage.setItem('pin_nuke_fit_mode', currentMode);
+            updateObjectFit();
+            aspectRatioBtn.style.transform = 'scale(0.8)';
+            setTimeout(() => aspectRatioBtn.style.transform = 'scale(1)', 150);
+            showToast(currentMode === 0 ? 'Mode: Cover Fill' : 'Mode: Original Fit');
+        };
+
+        const dlBtn = document.createElement('button');
+        dlBtn.style.cssText = btnBase;
+        dlBtn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>`;
+        dlBtn.onmouseenter = () => dlBtn.style.cssText = btnBase + btnHover;
+        dlBtn.onmouseleave = () => dlBtn.style.cssText = btnBase;
+        dlBtn.onclick = () => {
+            const active = getActiveBlock();
+            if (active) {
+                const media = active.querySelector('.nuke-media');
+                if (media && media.src) window.open(media.src, '_blank');
+            } else { showToast("No media in view."); }
+        };
+
+        let autoScrollIntervalTimer = null;
+        let pinTime = 0;
+        let lastPin = null;
+
+        const autoScrollBtn = document.createElement('button');
+        autoScrollBtn.style.cssText = btnBase;
+        autoScrollBtn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24"><polyline points="7 13 12 18 17 13"></polyline><polyline points="7 6 12 11 17 6"></polyline></svg>`;
+        
+        const handleAutoScrollLogic = () => {
+            if (!isAutoScrollEnabled) return;
+            const activePin = getActiveBlock();
+            if (activePin) {
+                if (activePin !== lastPin) {
+                    lastPin = activePin;
+                    pinTime = 0;
+                } else {
+                    const video = activePin.querySelector('video');
+                    let shouldScroll = false;
+                    if (video) shouldScroll = video.currentTime >= video.duration - 0.5;
+                    else { pinTime += 500; shouldScroll = pinTime >= 3500; }
+                    
+                    if (shouldScroll && activePin.nextElementSibling) {
+                        activePin.nextElementSibling.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        pinTime = 0; 
+                    }
+                }
+            }
+        };
+
+        autoScrollBtn.onclick = () => {
+            isAutoScrollEnabled = !isAutoScrollEnabled;
+            localStorage.setItem('pin_nuke_autoscroll', isAutoScrollEnabled);
+            autoScrollBtn.style.transform = 'scale(0.8)';
+            setTimeout(() => autoScrollBtn.style.transform = 'scale(1)', 150);
+            
+            if (isAutoScrollEnabled) {
+                autoScrollBtn.style.background = 'rgba(255,255,255,0.2)';
+                showToast('Auto-scroll: ON');
+                autoScrollIntervalTimer = setInterval(handleAutoScrollLogic, 500);
+            } else {
+                autoScrollBtn.style.background = 'transparent';
+                showToast('Auto-scroll: OFF');
+                clearInterval(autoScrollIntervalTimer);
+                lastPin = null;
+            }
+        };
+        
+        if (isAutoScrollEnabled) {
+            autoScrollBtn.style.background = 'rgba(255,255,255,0.2)';
+            autoScrollIntervalTimer = setInterval(handleAutoScrollLogic, 500);
+        }
+
+        const refreshBtn = document.createElement('button');
+        refreshBtn.style.cssText = btnBase;
+        refreshBtn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24"><path d="M21 2v6h-6"></path><path d="M21 13a9 9 0 1 1-3-7.7L21 8"></path></svg>`;
+        refreshBtn.onmouseenter = () => refreshBtn.style.cssText = btnBase + btnHover;
+        refreshBtn.onmouseleave = () => refreshBtn.style.cssText = btnBase;
+        refreshBtn.onclick = () => {
+            refreshBtn.style.transform = 'scale(0.8)';
+            setTimeout(() => refreshBtn.style.transform = 'scale(1)', 150);
+            syncNativeScroll();
+            setTimeout(() => {
+                window.location.reload();
+            }, 50);
+        };
+
+        const mainFab = document.createElement('button');
+        mainFab.style.cssText = 'width:50px;height:50px;border-radius:50%;border:1px solid rgba(255,255,255,0.2);background:transparent !important;cursor:pointer;display:flex;justify-content:center;align-items:center;box-shadow:none !important;transition:all 0.3s cubic-bezier(0.4, 0, 0.2, 1);padding:0;outline:none;-webkit-appearance:none;-webkit-tap-highlight-color:transparent;';
+        
+        const syncUIState = () => {
+            updateMasterCSS();
+            if (isMasterEnabled) {
+                mainFab.style.background = 'transparent';
+                mainFab.innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>`;
+            } else {
+                mainFab.style.background = '#e60023'; 
+                mainFab.innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>`;
+            }
+        };
+
+        mainFab.onclick = () => {
+            if (isMasterEnabled) {
+                syncNativeScroll();
+            }
+            isMasterEnabled = !isMasterEnabled;
+            localStorage.setItem('pin_nuke_master_state', isMasterEnabled);
+            syncUIState();
+            showToast(isMasterEnabled ? 'AMOLED Harvester: ON' : 'Normal Mode: ON');
+            mainFab.style.transform = 'scale(0.9)';
+            setTimeout(() => mainFab.style.transform = 'scale(1)', 150);
+        };
+
+        slideTab.onclick = () => {
+            panelOpen = !panelOpen;
+            panel.style.transform = panelOpen ? 'translateX(0)' : 'translateX(calc(100% - 30px))';
+            slideTab.innerHTML = panelOpen ? chevronRight : chevronLeft;
+        };
+
+        menuTray.appendChild(homeBtn); // Appended the Home Button here
+        menuTray.appendChild(saveBtn);
+        menuTray.appendChild(boardBtn);
+        menuTray.appendChild(aspectRatioBtn); 
+        menuTray.appendChild(dlBtn);
+        menuTray.appendChild(autoScrollBtn);
+        menuTray.appendChild(refreshBtn);
+        
+        contentBox.appendChild(menuTray);
+        contentBox.appendChild(mainFab);
+
+        panel.appendChild(slideTab);
+        panel.appendChild(contentBox);
+        document.body.appendChild(panel);
+
+        updateObjectFit();
+        syncUIState(); 
+    });
+})();

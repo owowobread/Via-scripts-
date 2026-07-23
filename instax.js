@@ -176,22 +176,32 @@
         const targetFeed = `article video:not(a video), article img:not([alt*="profile" i]):not(a img)`;
         const targetModal = `div[role="dialog"] video:not(a video), div[role="dialog"] img:not([alt*="profile" i]):not(a img)`;
         
+        const divReset = `
+            article *, div[role="dialog"] * {
+                background: transparent !important;
+                backdrop-filter: none !important;
+                -webkit-backdrop-filter: none !important;
+                box-shadow: none !important;
+            }
+            article div, div[role="dialog"] div,
+            article ul, div[role="dialog"] ul,
+            article li, div[role="dialog"] li,
+            article picture, div[role="dialog"] picture,
+            article figure, div[role="dialog"] figure {
+                position: static !important;
+                width: 100% !important;
+                height: 100% !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                transform: none !important;
+                overflow: visible !important;
+                clip-path: none !important;
+            }
+        `;
+
         const modes = [
             { name: "Mode: Cover Fullscreen", css: `
-                article div, div[role="dialog"] div,
-                article ul, div[role="dialog"] ul,
-                article li, div[role="dialog"] li,
-                article picture, div[role="dialog"] picture,
-                article figure, div[role="dialog"] figure {
-                    position: static !important;
-                    width: 100% !important;
-                    height: 100% !important;
-                    padding: 0 !important;
-                    margin: 0 !important;
-                    transform: none !important;
-                    overflow: visible !important;
-                    clip-path: none !important;
-                }
+                ${divReset}
                 ${targetFeed}, ${targetModal} { 
                     position: absolute !important; 
                     top: 0 !important; 
@@ -204,7 +214,6 @@
                     object-position: center !important; 
                     aspect-ratio: auto !important; 
                     z-index: 99995 !important; 
-                    background: transparent !important; 
                     border: none !important; 
                     margin: 0 !important; 
                     padding: 0 !important; 
@@ -213,21 +222,24 @@
                 }
             `},
             { name: "Mode: Original Size", css: `
+                ${divReset}
                 ${targetFeed}, ${targetModal} { 
                     position: absolute !important; 
-                    top: 50% !important; 
-                    left: 50% !important; 
-                    transform: translate(-50%, -50%) !important; 
+                    top: 0 !important; 
+                    left: 0 !important; 
                     width: 100vw !important; 
-                    height: auto !important; 
+                    height: 100vh !important; 
+                    max-width: 100vw !important; 
                     max-height: 100vh !important; 
                     object-fit: contain !important; 
+                    object-position: center !important; 
                     aspect-ratio: auto !important; 
                     z-index: 99995 !important; 
-                    background: transparent !important; 
                     border: none !important; 
                     margin: 0 !important; 
                     padding: 0 !important; 
+                    border-radius: 0 !important; 
+                    transform: none !important; 
                 }
             `}
         ];
@@ -347,6 +359,58 @@
         scrubberBar.id = 'ig-scrubber-bar';
         scrubberBar.style.cssText = 'position:fixed;bottom:0;left:0;height:3px;background:rgba(255,255,255,1);z-index:9999998;width:0%;pointer-events:none;box-shadow:0 -1px 5px rgba(0,0,0,0.7);transition:opacity 0.2s ease;opacity:0;';
         document.body.appendChild(scrubberBar);
+
+        // --- CAROUSEL BUTTONS INJECTION ---
+        const carouselStyle = document.createElement('style');
+        carouselStyle.innerHTML = `
+            #ig-carousel-left, #ig-carousel-right { position: fixed !important; top: 50% !important; transform: translateY(-50%) !important; font-size: 30px !important; color: rgba(255,255,255,0.7) !important; background: rgba(0,0,0,0.3) !important; border-radius: 50% !important; width: 40px !important; height: 40px !important; display: none !important; justify-content: center !important; align-items: center !important; z-index: 9999999 !important; cursor: pointer !important; user-select: none !important; backdrop-filter: blur(5px) !important; -webkit-backdrop-filter: blur(5px) !important; }
+            #ig-carousel-left { left: 10px !important; }
+            #ig-carousel-right { right: 10px !important; }
+        `;
+        document.head.appendChild(carouselStyle);
+
+        const leftBtn = document.createElement('div');
+        leftBtn.id = 'ig-carousel-left';
+        leftBtn.innerHTML = '&#10094;';
+
+        const rightBtn = document.createElement('div');
+        rightBtn.id = 'ig-carousel-right';
+        rightBtn.innerHTML = '&#10095;';
+
+        document.body.appendChild(leftBtn);
+        document.body.appendChild(rightBtn);
+
+        function triggerCarousel(direction) {
+            const activeMedia = getActiveMediaFromCenter();
+            if (!activeMedia) return;
+            const container = activeMedia.closest('article, div[role="dialog"]');
+            if (!container) return;
+            
+            let targetBtn = null;
+            const buttons = Array.from(container.querySelectorAll('button, [role="button"], a[role="button"]'));
+            if (direction === 'next') {
+                targetBtn = buttons.find(b => { const l = (b.getAttribute('aria-label')||'').toLowerCase(); return l.includes('next') || l.includes('right'); });
+            } else {
+                targetBtn = buttons.find(b => { const l = (b.getAttribute('aria-label')||'').toLowerCase(); return l.includes('go back') || l.includes('previous') || l.includes('left'); });
+            }
+            
+            if (targetBtn) {
+                targetBtn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); 
+                targetBtn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true })); 
+                targetBtn.click();
+            } else {
+                const ul = container.querySelector('ul');
+                if (ul) {
+                    const scrollAmount = ul.clientWidth;
+                    ul.scrollBy({ left: direction === 'next' ? scrollAmount : -scrollAmount, behavior: 'smooth' });
+                }
+            }
+        }
+
+        leftBtn.addEventListener('click', (e) => { e.stopPropagation(); triggerCarousel('prev'); });
+        rightBtn.addEventListener('click', (e) => { e.stopPropagation(); triggerCarousel('next'); });
+        leftBtn.addEventListener('touchstart', (e) => e.stopPropagation());
+        rightBtn.addEventListener('touchstart', (e) => e.stopPropagation());
 
         const toast = document.getElementById('ig-toast');
         let toastTimeout;
@@ -559,7 +623,7 @@
         uiBtnSpeed.onclick = () => { 
             speedIdx = (speedIdx + 1) % speeds.length; currentPlaybackSpeed = speeds[speedIdx]; 
             localStorage.setItem('ig_nuke_speed', currentPlaybackSpeed); uiBtnSpeed.innerText = currentPlaybackSpeed + 'x'; 
-            document.querySelectorAll('video').forEach(video => video.playbackRate = currentPlaybackSpeed); showToast(`Speed: ${currentPlaybackSpeed}x`); 
+            const activeVid = getActiveVideoFromCenter(); document.querySelectorAll('video').forEach(video => { if (video === activeVid) video.playbackRate = currentPlaybackSpeed; }); showToast(`Speed: ${currentPlaybackSpeed}x`); 
         };
 
         const muteIcon = document.getElementById('ui-icon-mute');
@@ -567,7 +631,7 @@
         updateMuteVisuals();
         document.getElementById('ui-btn-mute').onclick = () => { 
             globalMuteState = !globalMuteState; localStorage.setItem('ig_nuke_muted', globalMuteState); 
-            document.querySelectorAll('video').forEach(video => { video.muted = globalMuteState; if(!globalMuteState) { video.volume = 1; video.removeAttribute('muted'); } }); 
+            const activeVid = getActiveVideoFromCenter(); document.querySelectorAll('video').forEach(video => { if (video === activeVid) { video.muted = globalMuteState; if(!globalMuteState) { video.volume = 1; video.removeAttribute('muted'); } } else { video.muted = true; } }); 
             updateMuteVisuals(); showToast(globalMuteState ? 'Muted' : 'Unmuted'); 
         };
 
@@ -713,7 +777,7 @@
             ratioStyle.disabled = !active; 
             qualityStyle.disabled = !active;
             
-            document.querySelectorAll('video').forEach(video => { video.playbackRate = active ? currentPlaybackSpeed : 1; });
+            const activeVid = getActiveVideoFromCenter(); document.querySelectorAll('video').forEach(video => { if (video === activeVid) video.playbackRate = active ? currentPlaybackSpeed : 1; });
             
             if (!isMasterEnabled) { 
                 masterBtn.style.color = '#ff4444'; 
@@ -771,7 +835,7 @@
             video: null
         };
 
-        const ripMuteLock = () => { document.querySelectorAll('video').forEach(video => { video.muted = globalMuteState; if (!globalMuteState) { video.volume = 1; video.removeAttribute('muted'); video.play().catch(() => {}); } }); updateMuteVisuals(); };
+        const ripMuteLock = () => { const activeVid = getActiveVideoFromCenter(); document.querySelectorAll('video').forEach(video => { if (video === activeVid) { video.muted = globalMuteState; if (!globalMuteState) { video.volume = 1; video.removeAttribute('muted'); video.play().catch(() => {}); } } else { video.muted = true; video.pause(); } }); updateMuteVisuals(); };
         ['touchstart', 'click', 'scroll', 'wheel', 'keydown'].forEach(evt => { window.addEventListener(evt, () => { if(isVideoPage() && isMasterEnabled) ripMuteLock(); }, { once: true, passive: true }); });
 
         const updateScrubber = () => {
@@ -807,14 +871,54 @@
                     }
                 }
 
-                const video = getActiveVideoFromCenter();
-                if (video && video.duration) {
-                    if(video.playbackRate !== currentPlaybackSpeed && (!gestureState.isPressing || gestureState.video !== video)) video.playbackRate = currentPlaybackSpeed;
-                    if(video.muted !== globalMuteState) { video.muted = globalMuteState; if (!globalMuteState) { video.volume = 1; video.removeAttribute('muted'); } }
-                }
+                const activeVid = getActiveVideoFromCenter();
+                document.querySelectorAll('video').forEach(video => {
+                    if (video === activeVid) {
+                        if (video.duration) {
+                            if(video.playbackRate !== currentPlaybackSpeed && (!gestureState.isPressing || gestureState.video !== video)) video.playbackRate = currentPlaybackSpeed;
+                            if(video.muted !== globalMuteState) { video.muted = globalMuteState; if (!globalMuteState) { video.volume = 1; video.removeAttribute('muted'); } }
+                        }
+                    } else {
+                        if (!video.paused) video.pause();
+                        video.muted = true;
+                    }
+                });
             } else {
                 scrubberBar.style.opacity = '0';
             }
+            
+            // --- CAROUSEL VISIBILITY LOGIC ---
+            const currentActiveMedia = getActiveMediaFromCenter();
+            if (currentActiveMedia && currentActiveMedia.tagName === 'IMG' && isMasterEnabled && controlsVisible) {
+                const container = currentActiveMedia.closest('article, div[role="dialog"]');
+                let showLeft = false;
+                let showRight = false;
+                if (container) {
+                    const buttons = Array.from(container.querySelectorAll('button, [role="button"], a[role="button"]'));
+                    const hasNext = buttons.some(b => { const l = (b.getAttribute('aria-label')||'').toLowerCase(); return l.includes('next') || l.includes('right'); });
+                    const hasPrev = buttons.some(b => { const l = (b.getAttribute('aria-label')||'').toLowerCase(); return l.includes('go back') || l.includes('previous') || l.includes('left'); });
+                    
+                    if (hasNext) showRight = true;
+                    if (hasPrev) showLeft = true;
+                    
+                    if (!showRight && !showLeft) {
+                        const ul = container.querySelector('ul');
+                        if (ul && ul.children.length > 1) {
+                            showLeft = true; showRight = true;
+                        }
+                    }
+                }
+                
+                if (showLeft) leftBtn.style.setProperty('display', 'flex', 'important');
+                else leftBtn.style.setProperty('display', 'none', 'important');
+                
+                if (showRight) rightBtn.style.setProperty('display', 'flex', 'important');
+                else rightBtn.style.setProperty('display', 'none', 'important');
+            } else {
+                leftBtn.style.setProperty('display', 'none', 'important');
+                rightBtn.style.setProperty('display', 'none', 'important');
+            }
+
             requestAnimationFrame(updateScrubber);
         };
         requestAnimationFrame(updateScrubber);
@@ -822,6 +926,47 @@
         // =========================================================================
         // GESTURE & NAVIGATION EVENT LISTENERS
         // =========================================================================
+
+        // --- PINCH TO ZOOM LOGIC ---
+        let initialPinchDist = 0;
+        let pinchMedia = null;
+
+        window.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 2 && isMasterEnabled) {
+                pinchMedia = getActiveMediaFromCenter();
+                if (pinchMedia) {
+                    initialPinchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+                }
+            }
+        }, { capture: true, passive: false });
+
+        window.addEventListener('touchmove', (e) => {
+            if (e.touches.length === 2 && pinchMedia && isMasterEnabled) {
+                if (e.cancelable) e.preventDefault(); 
+                e.stopPropagation();
+                const currentDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+                const scale = Math.max(1, currentDist / initialPinchDist);
+                // The base layout logic handles position via object-fit now, so we just scale
+                pinchMedia.style.setProperty('transform', `scale(${scale})`, 'important');
+                pinchMedia.style.setProperty('transition', 'none', 'important');
+                pinchMedia.style.setProperty('z-index', '999999', 'important');
+            }
+        }, { capture: true, passive: false });
+
+        window.addEventListener('touchend', (e) => {
+            if (pinchMedia && e.touches.length < 2) {
+                pinchMedia.style.setProperty('transform', 'none', 'important');
+                pinchMedia.style.setProperty('transition', 'transform 0.2s ease', 'important');
+                const mediaToReset = pinchMedia;
+                setTimeout(() => {
+                    if (mediaToReset) {
+                        mediaToReset.style.removeProperty('transition');
+                        mediaToReset.style.removeProperty('z-index');
+                    }
+                }, 200);
+                pinchMedia = null;
+            }
+        }, { capture: true, passive: true });
 
         window.addEventListener('scroll', (e) => {
             if (isMasterEnabled && isVideoPage()) {

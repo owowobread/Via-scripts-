@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         Instagram Ultimate Nuke v49.2 (Infinite Carousel & Icon Dynamic Sync)
+// @name         Instagram Ultimate Nuke v49.4 (Infinite Carousel & Icon Dynamic Sync)
 // @namespace    https://viayoo.com/
-// @version      49.2.1
+// @version      49.4.0
 // @description  UI hide fixed. Action row converted to infinite swipe carousel. Dynamic Home/Reels icon sync. Profile scraper fixed for Reels.
 // @author       You
 // @run-at       document-start
@@ -245,32 +245,40 @@
         ];
         let currentMode = 0; ratioStyle.innerHTML = modes[currentMode].css; 
 
-        // --- BOTTOM UI STYLES ---
+        // --- SPATIAL / BOX-LESS UI DESIGN ---
         const uiStyle = document.createElement('style');
         uiStyle.innerHTML = `
-            #ig-bottom-ui { box-sizing: border-box; position: fixed; bottom: 0; left: 0; width: 100vw; max-width: 100%; display: flex; flex-direction: column; justify-content: flex-end; z-index: 9999999; padding: 20px 16px max(16px, env(safe-area-inset-bottom)); background: linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.7) 40%, transparent 100%); pointer-events: none; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; transition: opacity 0.2s ease-out; opacity: 1; }
+            #ig-bottom-ui { box-sizing: border-box; position: fixed; bottom: 0; left: 0; width: 100vw; max-width: 100%; display: flex; flex-direction: column; justify-content: flex-end; z-index: 9999999; padding: 0 16px max(24px, env(safe-area-inset-bottom)); background: linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.3) 50%, transparent 100%); pointer-events: none; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; transition: opacity 0.3s cubic-bezier(0.2, 0.8, 0.2, 1); opacity: 1; }
             #ig-bottom-ui * { box-sizing: border-box; }
             .ig-pointer { pointer-events: auto; }
             
-            .ig-profile-row { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; width: 100%; }
-            .ig-avatar { width: 44px; height: 44px; border-radius: 50%; background: #333; border: 1.5px solid rgba(255,255,255,0.8); object-fit: cover; flex-shrink: 0; cursor: pointer; }
+            /* Profile & Caption Zone */
+            .ig-profile-row { display: flex; align-items: center; gap: 14px; margin-bottom: 8px; width: 100%; text-shadow: 0 2px 10px rgba(0,0,0,0.9); }
+            .ig-avatar { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; flex-shrink: 0; cursor: pointer; transition: transform 0.2s cubic-bezier(0.19, 1, 0.22, 1); border: 1.5px solid rgba(255,255,255,0.9); box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+            .ig-avatar:active { transform: scale(0.85); }
             .ig-user-info { display: flex; flex-direction: column; justify-content: center; cursor: pointer; flex-grow: 1; min-width: 0; }
-            .ig-username { color: #fff; font-weight: 700; font-size: 15px; text-shadow: 0 1px 3px rgba(0,0,0,0.9); display: flex; align-items: center; gap: 4px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .ig-username { color: #fff; font-weight: 700; font-size: 15px; letter-spacing: -0.2px; display: flex; align-items: center; gap: 4px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
             
-            .ig-follow-btn { margin-left: auto; background: rgba(255,255,255,0.25); border: 1px solid rgba(255,255,255,0.5); color: #fff; font-weight: 700; border-radius: 9999px; padding: 6px 16px; font-size: 13px; cursor: pointer; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); transition: all 0.2s ease; flex-shrink: 0; display: flex; align-items: center; gap: 4px; }
-            .ig-follow-btn.following { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.25); color: rgba(255,255,255,0.6); }
+            /* Clean Follow Button */
+            .ig-follow-btn { margin-left: auto; background: transparent; color: #fff; font-weight: 700; border-radius: 99px; padding: 6px 14px; font-size: 13.5px; cursor: pointer; transition: all 0.25s cubic-bezier(0.19, 1, 0.22, 1); flex-shrink: 0; display: flex; align-items: center; gap: 4px; border: 1.5px solid rgba(255,255,255,0.8); box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+            .ig-follow-btn:active { transform: scale(0.9); background: #fff; color: #000; }
+            .ig-follow-btn.following { border-color: rgba(255,255,255,0.2); color: rgba(255,255,255,0.6); box-shadow: none; }
             
-            .ig-caption { color: #fff; font-size: 14px; text-shadow: 0 1px 2px rgba(0,0,0,0.8); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; margin-bottom: 12px; line-height: 1.3; }
+            .ig-caption { color: rgba(255,255,255,0.9); font-size: 14.5px; font-weight: 400; text-shadow: 0 2px 8px rgba(0,0,0,0.9); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; margin-bottom: 24px; line-height: 1.4; padding-left: 2px; }
             
-            .ig-action-row { display: flex; gap: 12px; overflow-x: hidden; padding-bottom: 4px; width: 100%; touch-action: pan-y; }
+            /* Free-floating Action Row */
+            .ig-action-row { display: flex; gap: 32px; overflow-x: hidden; padding: 12px 16px; margin: 0 -16px; width: calc(100% + 32px); touch-action: pan-y; align-items: center; justify-content: flex-start; mask-image: linear-gradient(to right, transparent 0%, black 12%, black 88%, transparent 100%); -webkit-mask-image: linear-gradient(to right, transparent 0%, black 12%, black 88%, transparent 100%); }
             .ig-action-row::-webkit-scrollbar { display: none; }
             
-            .ig-action-btn { width: 40px; height: 40px; border-radius: 50%; border: none; background: rgba(255,255,255,0.15); backdrop-filter: blur(8px); color: #fff; cursor: pointer; display: flex; justify-content: center; align-items: center; transition: transform 0.1s, background 0.2s; padding: 0; flex-shrink: 0; }
-            .ig-action-btn:active { transform: scale(0.85); }
-            .ig-action-btn svg { width: 20px; height: 20px; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5)); }
-            .ig-speed-text { font-size: 14px; font-weight: bold; font-family: sans-serif; text-shadow: 0 1px 2px rgba(0,0,0,0.5); }
+            /* Completely Box-less Icons */
+            .ig-action-btn { width: 32px; height: 32px; border: none; background: transparent; color: rgba(255,255,255,0.85); cursor: pointer; display: flex; justify-content: center; align-items: center; transition: all 0.3s cubic-bezier(0.19, 1, 0.22, 1); padding: 0; flex-shrink: 0; overflow: visible; }
+            .ig-action-btn:active { color: #fff; transform: scale(0.65); filter: drop-shadow(0 0 16px rgba(255,255,255,0.6)); }
+            .ig-action-btn svg { width: 26px; height: 26px; stroke-width: 2.5px !important; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.6)); transition: inherit; }
+            .ig-speed-text { font-size: 16px; font-weight: 800; font-family: -apple-system, sans-serif; letter-spacing: -0.5px; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.6)); display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; }
             
-            #ig-toast { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.8); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.1); color: white; padding: 12px 24px; border-radius: 30px; font-family: sans-serif; font-weight: bold; font-size: 14px; z-index: 10000002; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+            /* Sleek Toast Notification */
+            #ig-toast { position: fixed; top: 40%; left: 50%; transform: translate(-50%, -50%) scale(0.9); background: transparent; color: #fff; text-shadow: 0 0 16px rgba(255,255,255,0.5), 0 2px 8px rgba(0,0,0,0.9); font-family: -apple-system, sans-serif; font-weight: 700; font-size: 15px; letter-spacing: 0.5px; z-index: 10000002; opacity: 0; pointer-events: none; transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.19, 1, 0.22, 1); }
+            #ig-toast.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
         `;
         document.head.appendChild(uiStyle);
 
@@ -281,19 +289,19 @@
                 <div class="ig-user-info" id="ui-profile-link">
                     <div class="ig-username"><span id="ui-username">Loading...</span></div>
                 </div>
-                <button class="ig-follow-btn" id="ui-btn-follow"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg> Follow</button>
+                <button class="ig-follow-btn" id="ui-btn-follow"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg> Follow</button>
             </div>
             <div class="ig-caption ig-pointer" id="ui-caption"></div>
             <div class="ig-action-row ig-pointer">
                 <button class="ig-action-btn ig-speed-text" id="ui-btn-speed">1x</button>
-                <button class="ig-action-btn" id="ui-btn-mute"><svg id="ui-icon-mute" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path></svg></button>
-                <button class="ig-action-btn" id="ui-btn-save"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg></button>
-                <button class="ig-action-btn" id="ui-btn-aspect"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg></button>
-                <button class="ig-action-btn" id="ui-btn-feed"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect><line x1="7" y1="2" x2="7" y2="22"></line><line x1="17" y1="2" x2="17" y2="22"></line><line x1="2" y1="12" x2="22" y2="12"></line><line x1="2" y1="7" x2="7" y2="7"></line><line x1="2" y1="17" x2="7" y2="17"></line><line x1="17" y1="17" x2="22" y2="17"></line><line x1="17" y1="7" x2="22" y2="7"></line></svg></button>
-                <button class="ig-action-btn" id="ui-btn-saved"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg></button>
-                <button class="ig-action-btn" id="ui-btn-refresh"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"></path><path d="M21 13a9 9 0 1 1-3-7.7L21 8"></path></svg></button>
-                <button class="ig-action-btn" id="ui-btn-autoscroll"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 13 12 18 17 13"></polyline><polyline points="7 6 12 11 17 6"></polyline></svg></button>
-                <button class="ig-action-btn" id="ui-btn-master"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg></button>
+                <button class="ig-action-btn" id="ui-btn-mute"><svg id="ui-icon-mute" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path></svg></button>
+                <button class="ig-action-btn" id="ui-btn-save"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg></button>
+                <button class="ig-action-btn" id="ui-btn-aspect"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg></button>
+                <button class="ig-action-btn" id="ui-btn-feed"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect><line x1="7" y1="2" x2="7" y2="22"></line><line x1="17" y1="2" x2="17" y2="22"></line><line x1="2" y1="12" x2="22" y2="12"></line><line x1="2" y1="7" x2="7" y2="7"></line><line x1="2" y1="17" x2="7" y2="17"></line><line x1="17" y1="17" x2="22" y2="17"></line><line x1="17" y1="7" x2="22" y2="7"></line></svg></button>
+                <button class="ig-action-btn" id="ui-btn-saved"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg></button>
+                <button class="ig-action-btn" id="ui-btn-refresh"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"></path><path d="M21 13a9 9 0 1 1-3-7.7L21 8"></path></svg></button>
+                <button class="ig-action-btn" id="ui-btn-autoscroll"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 13 12 18 17 13"></polyline><polyline points="7 6 12 11 17 6"></polyline></svg></button>
+                <button class="ig-action-btn" id="ui-btn-master"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg></button>
             </div>
             <div id="ig-toast"></div>
         `;
@@ -304,7 +312,7 @@
         if (actionRow) {
             let dragStartX = 0;
             let dragAccumulator = 0;
-            const dragThreshold = 35; 
+            const dragThreshold = 40; 
             
             actionRow.addEventListener('touchstart', (e) => {
                 dragStartX = e.touches[0].clientX;
@@ -343,7 +351,7 @@
         // --- RESCUE FAB INJECTION ---
         const masterToggleFab = document.createElement('button');
         masterToggleFab.id = 'ig-master-rescue-fab';
-        masterToggleFab.style.cssText = 'position:fixed;bottom:20px;right:20px;width:50px;height:50px;border-radius:50%;border:1px solid rgba(255,255,255,0.2);background:rgba(255,68,68,0.2);color:#ff4444;cursor:pointer;display:none;justify-content:center;align-items:center;box-shadow:0 4px 12px rgba(0,0,0,0.5);z-index:9999999;backdrop-filter:blur(10px);transition:all 0.3s ease;';
+        masterToggleFab.style.cssText = 'position:fixed;bottom:20px;right:20px;width:44px;height:44px;border-radius:50%;border:none;background:rgba(255,68,68,0.25);color:#ff4444;cursor:pointer;display:none;justify-content:center;align-items:center;box-shadow:0 4px 16px rgba(0,0,0,0.5);z-index:9999999;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);transition:all 0.3s cubic-bezier(0.19, 1, 0.22, 1);';
         masterToggleFab.innerHTML = `<svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>`;
         document.body.appendChild(masterToggleFab);
 
@@ -354,28 +362,33 @@
             showToast('Normal Mode: OFF');
         };
 
-        // --- SCRUBBER BAR INJECTION ---
+        // --- SCRUBBER BAR INJECTION (Floating Light Beam) ---
         const scrubberBar = document.createElement('div');
         scrubberBar.id = 'ig-scrubber-bar';
-        scrubberBar.style.cssText = 'position:fixed;bottom:0;left:0;height:3px;background:rgba(255,255,255,1);z-index:9999998;width:0%;pointer-events:none;box-shadow:0 -1px 5px rgba(0,0,0,0.7);transition:opacity 0.2s ease;opacity:0;';
+        scrubberBar.style.cssText = 'position:fixed;bottom:4px;left:0;height:1.5px;background:#fff;z-index:9999998;width:0%;pointer-events:none;box-shadow:0 0 8px rgba(255,255,255,1), 0 -2px 6px rgba(255,255,255,0.4);transition:opacity 0.3s ease;opacity:0;border-radius:2px;';
         document.body.appendChild(scrubberBar);
 
-        // --- CAROUSEL BUTTONS INJECTION ---
+        // --- KINETIC EDGE TAP ZONES (Replaces clunky chevrons) ---
         const carouselStyle = document.createElement('style');
         carouselStyle.innerHTML = `
-            #ig-carousel-left, #ig-carousel-right { position: fixed !important; top: 50% !important; transform: translateY(-50%) !important; font-size: 30px !important; color: rgba(255,255,255,0.7) !important; background: rgba(0,0,0,0.3) !important; border-radius: 50% !important; width: 40px !important; height: 40px !important; display: none !important; justify-content: center !important; align-items: center !important; z-index: 9999999 !important; cursor: pointer !important; user-select: none !important; backdrop-filter: blur(5px) !important; -webkit-backdrop-filter: blur(5px) !important; }
-            #ig-carousel-left { left: 10px !important; }
-            #ig-carousel-right { right: 10px !important; }
+            #ig-carousel-left, #ig-carousel-right { position: fixed !important; top: 0 !important; height: 100vh !important; width: 15vw !important; background: transparent !important; border: none !important; display: none !important; z-index: 9999990 !important; cursor: pointer !important; user-select: none !important; -webkit-tap-highlight-color: transparent !important; }
+            #ig-carousel-left { left: 0 !important; }
+            #ig-carousel-right { right: 0 !important; }
+            
+            /* The Kinetic Edge Glow */
+            #ig-carousel-left::after, #ig-carousel-right::after { content: ''; position: absolute; top: 35%; height: 30%; width: 2px; background: linear-gradient(to bottom, transparent, rgba(255,255,255,0.8), transparent); box-shadow: 0 0 12px rgba(255,255,255,0.8); opacity: 0; transition: opacity 0.3s cubic-bezier(0.19, 1, 0.22, 1); }
+            #ig-carousel-left::after { left: 0; }
+            #ig-carousel-right::after { right: 0; }
+            
+            #ig-carousel-left:active::after, #ig-carousel-right:active::after { opacity: 1; transition: opacity 0.05s; }
         `;
         document.head.appendChild(carouselStyle);
 
         const leftBtn = document.createElement('div');
         leftBtn.id = 'ig-carousel-left';
-        leftBtn.innerHTML = '&#10094;';
 
         const rightBtn = document.createElement('div');
         rightBtn.id = 'ig-carousel-right';
-        rightBtn.innerHTML = '&#10095;';
 
         document.body.appendChild(leftBtn);
         document.body.appendChild(rightBtn);
@@ -415,9 +428,9 @@
         const toast = document.getElementById('ig-toast');
         let toastTimeout;
         const showToast = (msg, keepAlive = false) => {
-            toast.innerText = msg; toast.style.opacity = '1';
+            toast.innerText = msg; toast.classList.add('show');
             clearTimeout(toastTimeout);
-            if (!keepAlive) toastTimeout = setTimeout(() => toast.style.opacity = '0', 1500);
+            if (!keepAlive) toastTimeout = setTimeout(() => toast.classList.remove('show'), 1500);
         };
 
         function extractShortcode(element) {
@@ -591,7 +604,13 @@
         const goToProfile = () => { const u = uiUsername.innerText; if (u && u !== 'Loading...') window.location.href = `/${u}/`; };
         uiAvatar.onclick = goToProfile; document.getElementById('ui-profile-link').onclick = goToProfile;
 
-        uiFollowBtn.onclick = function() {
+        // Note: lastVideoTime variable is declared further down in autoscroll logic block. We define it globally for the module right here so it can be accessed anywhere.
+        let lastVideoTime = 0;
+        let lastActiveVideo = null;
+
+        uiFollowBtn.onclick = function(e) {
+            if (e) { e.preventDefault(); e.stopPropagation(); }
+            lastVideoTime = 0; // Prevent auto-scroll from misfiring if IG resets the video state during the menu popup
             let activeMedia = getActiveMediaFromCenter();
             
             // Apply same precise boundary box isolation for the follow button specifically
@@ -606,14 +625,93 @@
             }
             if (!container) container = document.body;
 
-            let nativeBtn = Array.from(container.querySelectorAll('button, div[role="button"], a[role="button"]')).find(b => ['follow', 'follow back'].includes((b.innerText || '').trim().toLowerCase()));
-            if (!nativeBtn && container !== document.body) nativeBtn = Array.from(document.querySelectorAll('button, div[role="button"], a[role="button"]')).find(b => ['follow', 'follow back'].includes((b.innerText || '').trim().toLowerCase()));
+            const isCurrentlyFollowing = this.classList.contains('following');
+            let nativeBtn = null;
 
-            if (nativeBtn) {
-                nativeBtn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); nativeBtn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true })); nativeBtn.click();
-                this.innerHTML = 'Following'; this.classList.add('following'); showToast('Follow Triggered!');
+            if (isCurrentlyFollowing) {
+                // First try to find a visible "Following" button inside the precise container
+                nativeBtn = Array.from(container.querySelectorAll('button, div[role="button"], a[role="button"]')).find(b => ['following', 'requested'].includes((b.innerText || '').trim().toLowerCase()));
+                
+                let threeDotsSvg = null;
+                // If not found in container, look for the 3-dots menu before doing a global fallback
+                if (!nativeBtn) {
+                    threeDotsSvg = Array.from(container.querySelectorAll('svg')).find(s => {
+                        const label = (s.getAttribute('aria-label') || '').toLowerCase();
+                        return label === 'more options' || label === 'more';
+                    });
+                }
+
+                // Global fallback ONLY if neither is found in the container
+                if (!nativeBtn && !threeDotsSvg && container !== document.body) {
+                    nativeBtn = Array.from(document.querySelectorAll('button, div[role="button"], a[role="button"]')).find(b => ['following', 'requested'].includes((b.innerText || '').trim().toLowerCase()));
+                }
+                
+                if (nativeBtn) {
+                    nativeBtn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); nativeBtn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true })); nativeBtn.click();
+                    
+                    let unfollowAttempts = 0;
+                    const unfollowTimer = setInterval(() => {
+                        unfollowAttempts++;
+                        const confirmBtn = Array.from(document.querySelectorAll('button, [role="button"], [role="menuitem"], [role="dialog"] button')).find(b => (b.innerText || '').trim().toLowerCase() === 'unfollow');
+                        if (confirmBtn) {
+                            clearInterval(unfollowTimer);
+                            confirmBtn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); confirmBtn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true })); confirmBtn.click();
+                            lastVideoTime = 0; // Final reset once action concludes
+                        }
+                        if (unfollowAttempts > 20) clearInterval(unfollowTimer);
+                    }, 50);
+
+                    this.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg> Follow'; 
+                    this.classList.remove('following'); 
+                    showToast('Unfollow Triggered!');
+                } else if (threeDotsSvg) {
+                    // REELS / HOMEPAGE FALLBACK: Use the 3-dots menu
+                    const menuBtn = threeDotsSvg.closest('button, [role="button"]') || threeDotsSvg;
+                    menuBtn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); menuBtn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true })); menuBtn.click();
+
+                    let unfollowAttempts = 0;
+                    const unfollowTimer = setInterval(() => {
+                        unfollowAttempts++;
+                        const confirmBtn = Array.from(document.querySelectorAll('button, [role="button"], [role="menuitem"], [role="dialog"] button, span')).find(b => (b.innerText || '').trim().toLowerCase() === 'unfollow');
+                        
+                        if (confirmBtn) {
+                            clearInterval(unfollowTimer);
+                            lastVideoTime = 0; // Reset video tracker so auto-scroll won't rapid fire
+                            const targetBtn = confirmBtn.closest('button, [role="button"], [role="menuitem"]') || confirmBtn;
+                            targetBtn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); targetBtn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true })); targetBtn.click();
+                            
+                            // Check for secondary confirmation popup just in case
+                            setTimeout(() => {
+                                lastVideoTime = 0;
+                                const finalConfirm = Array.from(document.querySelectorAll('button, [role="button"], [role="dialog"] button')).find(b => (b.innerText || '').trim().toLowerCase() === 'unfollow');
+                                if (finalConfirm) {
+                                    finalConfirm.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); finalConfirm.dispatchEvent(new MouseEvent('mouseup', { bubbles: true })); finalConfirm.click();
+                                }
+                            }, 300);
+                        } else if (unfollowAttempts > 30) {
+                            clearInterval(unfollowTimer);
+                            // Clean up open menu if unfollow button isn't found
+                            const cancelBtn = Array.from(document.querySelectorAll('button, [role="button"], [role="menuitem"], [role="dialog"] button')).find(b => (b.innerText || '').trim().toLowerCase() === 'cancel');
+                            if(cancelBtn) cancelBtn.click();
+                        }
+                    }, 50);
+
+                    this.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg> Follow'; 
+                    this.classList.remove('following'); 
+                    showToast('Unfollow Triggered!');
+                } else {
+                    showToast('Unfollow button not found');
+                }
             } else {
-                if (Array.from(container.querySelectorAll('button, div[role="button"]')).some(b => (b.innerText || '').trim().toLowerCase() === 'following')) { this.innerHTML = 'Following'; this.classList.add('following'); showToast('Already Following!'); } else showToast('Follow button not found');
+                nativeBtn = Array.from(container.querySelectorAll('button, div[role="button"], a[role="button"]')).find(b => ['follow', 'follow back'].includes((b.innerText || '').trim().toLowerCase()));
+                if (!nativeBtn && container !== document.body) nativeBtn = Array.from(document.querySelectorAll('button, div[role="button"], a[role="button"]')).find(b => ['follow', 'follow back'].includes((b.innerText || '').trim().toLowerCase()));
+
+                if (nativeBtn) {
+                    nativeBtn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); nativeBtn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true })); nativeBtn.click();
+                    this.innerHTML = 'Following'; this.classList.add('following'); showToast('Follow Triggered!');
+                } else {
+                    showToast('Follow button not found');
+                }
             }
         };
 
@@ -646,7 +744,7 @@
                         if (label === 'Save' || label === 'Remove') {
                             const btn = svg.closest('button, [role="button"], a') || svg;
                             btn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); btn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true })); btn.click();
-                            if(label === 'Save') { this.style.background = 'rgba(29, 155, 240, 0.5)'; showToast("Saved!"); } else { this.style.background = 'rgba(255,255,255,0.15)'; showToast("Removed!"); }
+                            if(label === 'Save') { this.querySelector('svg').style.fill = 'white'; showToast("Saved!"); } else { this.querySelector('svg').style.fill = 'none'; showToast("Removed!"); }
                             nativeClicked = true; break;
                         }
                         const poly = svg.querySelector('polygon'); const path = svg.querySelector('path');
@@ -675,8 +773,8 @@
                         const result = localStorage.getItem('ig_bot_result');
                         if (result) {
                             clearInterval(statusChecker); localStorage.removeItem('ig_bot_result'); if (botTab && !botTab.closed) botTab.close();
-                            if (result === 'saved' || result === 'toggled') { this.style.background = 'rgba(29, 155, 240, 0.5)'; showToast("Saved to Profile!"); } 
-                            else if (result === 'removed') { this.style.background = 'rgba(255,255,255,0.15)'; showToast("Removed from Profile!"); } 
+                            if (result === 'saved' || result === 'toggled') { this.querySelector('svg').style.fill = 'white'; showToast("Saved to Profile!"); } 
+                            else if (result === 'removed') { this.querySelector('svg').style.fill = 'none'; showToast("Removed from Profile!"); } 
                             else showToast("Bot Error");
                         }
                     }, 100);
@@ -692,8 +790,8 @@
             const btnFeed = document.getElementById('ui-btn-feed');
             if (!btnFeed) return;
             const isHome = window.location.pathname === '/';
-            const homeSVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>`;
-            const reelsSVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect><line x1="7" y1="2" x2="7" y2="22"></line><line x1="17" y1="2" x2="17" y2="22"></line><line x1="2" y1="12" x2="22" y2="12"></line><line x1="2" y1="7" x2="7" y2="7"></line><line x1="2" y1="17" x2="7" y2="17"></line><line x1="17" y1="17" x2="22" y2="17"></line><line x1="17" y1="7" x2="22" y2="7"></line></svg>`;
+            const homeSVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>`;
+            const reelsSVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect><line x1="7" y1="2" x2="7" y2="22"></line><line x1="17" y1="2" x2="17" y2="22"></line><line x1="2" y1="12" x2="22" y2="12"></line><line x1="2" y1="7" x2="7" y2="7"></line><line x1="2" y1="17" x2="7" y2="17"></line><line x1="17" y1="17" x2="22" y2="17"></line><line x1="17" y1="7" x2="22" y2="7"></line></svg>`;
             
             if (isHome && !btnFeed.innerHTML.includes('polyline points="9 22')) {
                 btnFeed.innerHTML = homeSVG;
@@ -721,9 +819,9 @@
         document.getElementById('ui-btn-refresh').onclick = () => { localStorage.removeItem('ig_nuke_playlist'); window.location.reload(); };
 
         let isAutoScrollEnabled = localStorage.getItem('ig_nuke_autoscroll') === 'true';
-        let autoScrollIntervalTimer = null; let lastActiveVideo = null; let lastVideoTime = 0;
+        let autoScrollIntervalTimer = null; 
         const autoScrollBtn = document.getElementById('ui-btn-autoscroll');
-        if (isAutoScrollEnabled) autoScrollBtn.style.background = 'rgba(255,255,255,0.4)';
+        if (isAutoScrollEnabled) autoScrollBtn.style.color = '#1d9bf0';
         
         const handleAutoScrollLogic = () => {
             if (!isAutoScrollEnabled || !isVideoPage()) return; const activeMedia = getActiveVideoFromCenter();
@@ -743,8 +841,8 @@
 
         autoScrollBtn.onclick = () => { 
             isAutoScrollEnabled = !isAutoScrollEnabled; localStorage.setItem('ig_nuke_autoscroll', isAutoScrollEnabled); 
-            if (isAutoScrollEnabled) { autoScrollBtn.style.background = 'rgba(255,255,255,0.4)'; showToast('Auto-scroll: ON'); autoScrollIntervalTimer = setInterval(handleAutoScrollLogic, 500); } 
-            else { autoScrollBtn.style.background = 'rgba(255,255,255,0.15)'; showToast('Auto-scroll: OFF'); clearInterval(autoScrollIntervalTimer); lastActiveVideo = null; } 
+            if (isAutoScrollEnabled) { autoScrollBtn.style.color = '#1d9bf0'; showToast('Auto-scroll: ON'); autoScrollIntervalTimer = setInterval(handleAutoScrollLogic, 500); } 
+            else { autoScrollBtn.style.color = 'rgba(255,255,255,0.85)'; showToast('Auto-scroll: OFF'); clearInterval(autoScrollIntervalTimer); lastActiveVideo = null; } 
         };
         if (isAutoScrollEnabled) autoScrollIntervalTimer = setInterval(handleAutoScrollLogic, 500);
 
@@ -781,10 +879,8 @@
             
             if (!isMasterEnabled) { 
                 masterBtn.style.color = '#ff4444'; 
-                masterBtn.style.background = 'rgba(255,68,68,0.2)'; 
             } else { 
-                masterBtn.style.color = '#fff'; 
-                masterBtn.style.background = 'rgba(255,255,255,0.15)'; 
+                masterBtn.style.color = 'rgba(255,255,255,0.85)'; 
             }
 
             if (active) {
@@ -864,10 +960,23 @@
                                 uiFollowBtn.innerHTML = 'Following'; 
                                 uiFollowBtn.classList.add('following'); 
                             } else { 
-                                uiFollowBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg> Follow'; 
+                                uiFollowBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg> Follow'; 
                                 uiFollowBtn.classList.remove('following'); 
                             }
                         }
+                        
+                        const postContainer = media.closest('article, [role="presentation"], main') || media.parentElement.parentElement;
+                        let isSaved = false;
+                        if (postContainer) {
+                            const svgs = postContainer.querySelectorAll('svg');
+                            for (let svg of svgs) {
+                                let label = (svg.getAttribute('aria-label') || '').trim();
+                                if (label === 'Remove') { isSaved = true; break; }
+                                if (label === 'Save') { isSaved = false; break; }
+                            }
+                        }
+                        const saveSvg = document.querySelector('#ui-btn-save svg');
+                        if (saveSvg) saveSvg.style.fill = isSaved ? 'white' : 'none';
                     }
                 }
 
@@ -909,10 +1018,10 @@
                     }
                 }
                 
-                if (showLeft) leftBtn.style.setProperty('display', 'flex', 'important');
+                if (showLeft) leftBtn.style.setProperty('display', 'block', 'important');
                 else leftBtn.style.setProperty('display', 'none', 'important');
                 
-                if (showRight) rightBtn.style.setProperty('display', 'flex', 'important');
+                if (showRight) rightBtn.style.setProperty('display', 'block', 'important');
                 else rightBtn.style.setProperty('display', 'none', 'important');
             } else {
                 leftBtn.style.setProperty('display', 'none', 'important');
@@ -930,12 +1039,14 @@
         // --- PINCH TO ZOOM LOGIC ---
         let initialPinchDist = 0;
         let pinchMedia = null;
+        let startScale = 1;
 
         window.addEventListener('touchstart', (e) => {
             if (e.touches.length === 2 && isMasterEnabled) {
                 pinchMedia = getActiveMediaFromCenter();
                 if (pinchMedia) {
                     initialPinchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+                    startScale = parseFloat(pinchMedia.dataset.scale) || 1;
                 }
             }
         }, { capture: true, passive: false });
@@ -945,7 +1056,8 @@
                 if (e.cancelable) e.preventDefault(); 
                 e.stopPropagation();
                 const currentDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
-                const scale = Math.max(1, currentDist / initialPinchDist);
+                const scale = Math.max(1, startScale * (currentDist / initialPinchDist));
+                pinchMedia.dataset.scale = scale;
                 // The base layout logic handles position via object-fit now, so we just scale
                 pinchMedia.style.setProperty('transform', `scale(${scale})`, 'important');
                 pinchMedia.style.setProperty('transition', 'none', 'important');
@@ -955,15 +1067,18 @@
 
         window.addEventListener('touchend', (e) => {
             if (pinchMedia && e.touches.length < 2) {
-                pinchMedia.style.setProperty('transform', 'none', 'important');
-                pinchMedia.style.setProperty('transition', 'transform 0.2s ease', 'important');
-                const mediaToReset = pinchMedia;
-                setTimeout(() => {
-                    if (mediaToReset) {
-                        mediaToReset.style.removeProperty('transition');
-                        mediaToReset.style.removeProperty('z-index');
-                    }
-                }, 200);
+                const currentScale = parseFloat(pinchMedia.dataset.scale) || 1;
+                if (currentScale <= 1) {
+                    pinchMedia.style.setProperty('transform', 'none', 'important');
+                    pinchMedia.style.setProperty('transition', 'transform 0.2s ease', 'important');
+                    const mediaToReset = pinchMedia;
+                    setTimeout(() => {
+                        if (mediaToReset) {
+                            mediaToReset.style.removeProperty('transition');
+                            mediaToReset.style.removeProperty('z-index');
+                        }
+                    }, 200);
+                }
                 pinchMedia = null;
             }
         }, { capture: true, passive: true });
@@ -996,7 +1111,12 @@
                 e.preventDefault();
                 return;
             }
-            const isUIClick = e.composedPath().some(el => (el.tagName === 'BUTTON' || (el.classList && el.classList.contains('ig-pointer'))));
+            const path = e.composedPath();
+            
+            // EXCEPTION: The left 15% and right 15% of the screen are unconditionally reserved
+            if (e.clientX < window.innerWidth * 0.15 || e.clientX > window.innerWidth * 0.85) return;
+
+            const isUIClick = path.some(el => (el.tagName === 'BUTTON' || (el.classList && el.classList.contains('ig-pointer'))));
             if (!isUIClick) { if (!controlsVisible) showUI(); else hideUI(); }
         }, { capture: true });
 
@@ -1040,7 +1160,12 @@
             const deltaY = e.touches[0].clientY - globalTouchStartY;
             const deltaX = e.touches[0].clientX - globalTouchStartX;
 
-            if (Math.abs(deltaY) > 8 && !gestureState.isScrubbing) hideUI();
+            if (Math.abs(deltaY) > 8 && !gestureState.isScrubbing) {
+                // EXCEPTION: Wiggling finger vertically while swiping inside the carousel zones will NO LONGER hide the UI
+                if (globalTouchStartX >= window.innerWidth * 0.15 && globalTouchStartX <= window.innerWidth * 0.85) {
+                    hideUI();
+                }
+            }
 
             if (!gestureState.video) return;
 
@@ -1077,7 +1202,17 @@
             const diffY = globalTouchStartY - e.changedTouches[0].clientY; 
             const diffX = globalTouchStartX - e.changedTouches[0].clientX;
 
-            if (Math.abs(diffX) > Math.abs(diffY)) return; 
+            // FLUID IMAGE SWIPE FIX
+            if (Math.abs(diffX) > Math.abs(diffY)) {
+                if (Math.abs(diffX) > 40) {
+                    const activeMedia = getActiveMediaFromCenter();
+                    if (activeMedia && activeMedia.tagName === 'IMG') {
+                        triggerCarousel(diffX > 0 ? 'prev' : 'next');
+                    }
+                }
+                return; // Prevent vertical swipe logic if horizontal
+            }
+
             if (diffY > 100) executeNavigation('next'); 
             else if (diffY < -100) executeNavigation('prev');
         }, { capture: true, passive: true });

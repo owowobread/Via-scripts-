@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         RedGIFs Ultimate Nuke v1.5 (Cinematic Mode & Infinite Carousel)
+// @name         RedGIFs Ultimate Nuke v1.6 (Cinematic Mode & Infinite Carousel)
 // @namespace    https://viayoo.com/
-// @version      1.5.0
-// @description  Hides native navigation and footer containers, enables true fullscreen playback, functional aspect ratio toggle, infinite sliding action panel, re-integrates all hidden RedGIFs features, and fixes scrolling behavior.
+// @version      1.6.0
+// @description  Hides native navigation and footer containers, enables true fullscreen playback, functional aspect ratio toggle, infinite sliding action panel, re-integrates all hidden RedGIFs features, and implements robust smooth-scrolling video navigation.
 // @author       You
 // @run-at       document-start
 // @match        https://*.redgifs.com/*
@@ -70,7 +70,7 @@ document.addEventListener("DOMContentLoaded", () => {
       
     [{ name: "screen-orientation", content: "portrait" }, { name: "x5-orientation", content: "portrait" }, { name: "orientation", content: "portrait" }].forEach(m => { let meta = document.createElement('meta'); meta.name = m.name; meta.content = m.content; document.head.appendChild(meta); });  
 
-    // --- CORE CSS (Restored scrolling and overflow-y on html/body) ---  
+    // --- CORE CSS (Ensures full vertical scrollability on html/body and app containers) ---  
     const globalStyle = document.createElement('style'); globalStyle.id = 'rg-global-override';  
     globalStyle.innerHTML = `  
         :not(#rg-bottom-ui):not(#rg-bottom-ui *):not(#rg-master-rescue-fab):not(#rg-master-rescue-fab *):not(#rg-scrub-toast) > header,  
@@ -84,7 +84,7 @@ document.addEventListener("DOMContentLoaded", () => {
             display: none !important; opacity: 0 !important; pointer-events: none !important; height: 0 !important; overflow: hidden !important;  
         }  
           
-        html, body {  
+        html, body, #app {  
             background-color: #000 !important;  
             margin: 0 !important;  
             padding: 0 !important;  
@@ -467,7 +467,7 @@ document.addEventListener("DOMContentLoaded", () => {
     requestAnimationFrame(updateScrubber);  
 
     // =========================================================================  
-    // GESTURE ENGINE (Scrub, Hold-Speed, Swipe Nav)  
+    // GESTURE ENGINE & DIRECT SMOOTH-SCROLL NAVIGATION  
     // =========================================================================  
       
     let globalTouchStartY = 0; let globalTouchStartX = 0;  
@@ -570,15 +570,47 @@ document.addEventListener("DOMContentLoaded", () => {
     }, { capture: true, passive: true });  
 
     // =========================================================================  
-    // NAVIGATION (RedGIFs SPA Router)  
+    // ROBUST DIRECT SCROLL NAVIGATION  
     // =========================================================================  
     const executeNavigation = (dir) => {  
         if (!isMasterEnabled) return;  
-        const key = dir === 'next' ? 'ArrowDown' : 'ArrowUp';  
-        const keyCode = dir === 'next' ? 40 : 38;  
-        window.dispatchEvent(new KeyboardEvent('keydown', { key: key, code: key, keyCode: keyCode, bubbles: true }));  
+        const feedItems = Array.from(document.querySelectorAll('.Feed-Item, [class*="FeedItem"], article, .VideoPlayer')).filter(el => {  
+            const rect = el.getBoundingClientRect();  
+            return rect.height > 100;  
+        });  
+
+        if (feedItems.length === 0) {  
+            window.scrollBy({ top: dir === 'next' ? window.innerHeight : -window.innerHeight, behavior: 'smooth' });  
+            return;  
+        }  
+
+        const centerY = window.innerHeight / 2;  
+        let closestIdx = 0;  
+        let minDst = Infinity;  
+
+        feedItems.forEach((item, idx) => {  
+            const rect = item.getBoundingClientRect();  
+            const dst = Math.abs(centerY - (rect.top + rect.height / 2));  
+            if (dst < minDst) {  
+                minDst = dst;  
+                closestIdx = idx;  
+            }  
+        });  
+
+        let targetItem = null;  
+        if (dir === 'next' && closestIdx < feedItems.length - 1) {  
+            targetItem = feedItems[closestIdx + 1];  
+        } else if (dir === 'prev' && closestIdx > 0) {  
+            targetItem = feedItems[closestIdx - 1];  
+        } else {  
+            window.scrollBy({ top: dir === 'next' ? window.innerHeight : -window.innerHeight, behavior: 'smooth' });  
+            return;  
+        }  
+
+        if (targetItem) {  
+            targetItem.scrollIntoView({ behavior: 'smooth', block: 'center' });  
+        }  
     };  
 });
 
 })();
-W

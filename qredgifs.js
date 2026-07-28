@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         RedGIFs Ultimate Nuke v1.4 (Cinematic Mode & Infinite Carousel)
+// @name         RedGIFs Ultimate Nuke v1.5 (Cinematic Mode & Infinite Carousel)
 // @namespace    https://viayoo.com/
-// @version      1.4.0
-// @description  Hides native navigation and footer containers, enables true fullscreen playback, functional aspect ratio toggle, infinite sliding action panel, and re-integrates all hidden RedGIFs features into the custom UI.
+// @version      1.5.0
+// @description  Hides native navigation and footer containers, enables true fullscreen playback, functional aspect ratio toggle, infinite sliding action panel, re-integrates all hidden RedGIFs features, and fixes scrolling behavior.
 // @author       You
 // @run-at       document-start
 // @match        https://*.redgifs.com/*
@@ -70,7 +70,7 @@ document.addEventListener("DOMContentLoaded", () => {
       
     [{ name: "screen-orientation", content: "portrait" }, { name: "x5-orientation", content: "portrait" }, { name: "orientation", content: "portrait" }].forEach(m => { let meta = document.createElement('meta'); meta.name = m.name; meta.content = m.content; document.head.appendChild(meta); });  
 
-    // --- CORE CSS (Restored body/html overflow to allow natural scrolling while nuking native footers/navs) ---  
+    // --- CORE CSS (Restored scrolling and overflow-y on html/body) ---  
     const globalStyle = document.createElement('style'); globalStyle.id = 'rg-global-override';  
     globalStyle.innerHTML = `  
         :not(#rg-bottom-ui):not(#rg-bottom-ui *):not(#rg-master-rescue-fab):not(#rg-master-rescue-fab *):not(#rg-scrub-toast) > header,  
@@ -91,6 +91,7 @@ document.addEventListener("DOMContentLoaded", () => {
             border: none !important;  
             box-sizing: border-box !important;  
             min-height: 100vh !important;  
+            overflow-y: auto !important;  
             overscroll-behavior-y: auto !important;  
         }  
 
@@ -100,8 +101,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const ratioStyle = document.createElement('style'); ratioStyle.id = 'rg-ratio-override'; document.head.appendChild(ratioStyle);  
     const modes = [  
-        { name: "Mode: Crop to Full (Cover)", css: `video { position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; height: 100dvh !important; object-fit: cover !important; object-position: center !important; z-index: 99990 !important; transform: none !important; margin: 0 !important; padding: 0 !important; }` },  
-        { name: "Mode: Original Aspect Ratio", css: `video { position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; height: 100dvh !important; object-fit: contain !important; object-position: center !important; z-index: 99990 !important; transform: none !important; margin: 0 !important; padding: 0 !important; background: #000 !important; }` }  
+        { name: "Mode: Crop to Full (Cover)", css: `video { position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; height: 100dvh !important; object-fit: cover !important; object-position: center !important; z-index: 99990 !important; transform: none !important; margin: 0 !important; padding: 0 !important; pointer-events: none !important; }` },  
+        { name: "Mode: Original Aspect Ratio", css: `video { position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; height: 100dvh !important; object-fit: contain !important; object-position: center !important; z-index: 99990 !important; transform: none !important; margin: 0 !important; padding: 0 !important; background: #000 !important; pointer-events: none !important; }` }  
     ];  
     let currentMode = 0; ratioStyle.innerHTML = modes[currentMode].css;  
 
@@ -298,7 +299,6 @@ document.addEventListener("DOMContentLoaded", () => {
         } else showToast("Like button not found in DOM");  
     };  
 
-    // Newly Integrated Footer/Feature Button Handlers  
     document.getElementById('ui-btn-share').onclick = () => {  
         if (navigator.share) {  
             navigator.share({ title: document.title, url: window.location.href }).catch(() => {});  
@@ -371,7 +371,6 @@ document.addEventListener("DOMContentLoaded", () => {
         updateMuteVisuals(); showToast(globalMuteState ? 'Muted' : 'Unmuted');   
     };  
 
-    // Aspect ratio toggle button cycling: Original Aspect Ratio <-> Crop to Full (Cover)  
     document.getElementById('ui-btn-aspect').onclick = () => {   
         currentMode = (currentMode + 1) % modes.length;   
         ratioStyle.innerHTML = modes[currentMode].css;   
@@ -582,3 +581,4 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 })();
+W

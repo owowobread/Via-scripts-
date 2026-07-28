@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         RedGIFs Ultimate Nuke v1.2 (Cinematic Mode & Infinite Carousel)
+// @name         RedGIFs Ultimate Nuke v1.3 (Cinematic Mode & Infinite Carousel)
 // @namespace    https://viayoo.com/
-// @version      1.2.0
-// @description  Hides native navigation bars, integrates a fully functional aspect ratio toggle (Original vs Crop Full), and adds an infinitely sliding bottom action panel.
+// @version      1.3.0
+// @description  Hides native navigation and footer containers (.ApplicationFooter-Container), enables true fullscreen playback, functional aspect ratio toggle (Original vs Crop Full), and infinite sliding action panel.
 // @author       You
 // @run-at       document-start
 // @match        https://*.redgifs.com/*
@@ -70,7 +70,7 @@
         
         [{ name: "screen-orientation", content: "portrait" }, { name: "x5-orientation", content: "portrait" }, { name: "orientation", content: "portrait" }].forEach(m => { let meta = document.createElement('meta'); meta.name = m.name; meta.content = m.content; document.head.appendChild(meta); });
 
-        // --- CORE CSS (Hides persistent bottom navbar/toolbars from screenshot and native UI) ---
+        // --- CORE CSS (Hides .ApplicationFooter-Container and all persistent navbars for true fullscreen) ---
         const globalStyle = document.createElement('style'); globalStyle.id = 'rg-global-override';
         globalStyle.innerHTML = `
             :not(#rg-bottom-ui):not(#rg-bottom-ui *):not(#rg-master-rescue-fab):not(#rg-master-rescue-fab *):not(#rg-scrub-toast) > header,
@@ -79,8 +79,9 @@
             div[class*="Overlay"], div[class*="VideoPlayer_ui"], div[class*="Sidebar"], div[class*="BottomBar"],
             .SoundControls, .PlayControls, .VideoHoverUI, .GifDetails, .Feed-Item-Audio,
             nav[class*="navbar"], div[class*="navbar"], nav[class*="footer"], div[class*="footer"],
-            div[style*="position: fixed"][style*="bottom"], div[style*="position:fixed"][style*="bottom"] {
-                display: none !important; opacity: 0 !important; pointer-events: none !important;
+            div[style*="position: fixed"][style*="bottom"], div[style*="position:fixed"][style*="bottom"],
+            .ApplicationFooter-Container, div[class*="ApplicationFooter"] {
+                display: none !important; opacity: 0 !important; pointer-events: none !important; height: 0 !important; overflow: hidden !important;
             }
             
             html, body, #app, main {
@@ -89,6 +90,9 @@
                 padding: 0 !important;
                 border: none !important;
                 box-sizing: border-box !important;
+                height: 100vh !important;
+                height: 100dvh !important;
+                overflow: hidden !important;
                 overscroll-behavior-y: none;
             }
 
@@ -98,8 +102,8 @@
 
         const ratioStyle = document.createElement('style'); ratioStyle.id = 'rg-ratio-override'; document.head.appendChild(ratioStyle);
         const modes = [
-            { name: "Mode: Cover Fullscreen", css: `video { position: absolute !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; object-fit: cover !important; object-position: center !important; z-index: 99990 !important; transform: none !important; margin: 0 !important; padding: 0 !important; }` },
-            { name: "Mode: Original Size", css: `video { position: absolute !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; object-fit: contain !important; object-position: center !important; z-index: 99990 !important; transform: none !important; margin: 0 !important; padding: 0 !important; }` }
+            { name: "Mode: Crop to Full (Cover)", css: `video { position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; height: 100dvh !important; object-fit: cover !important; object-position: center !important; z-index: 99990 !important; transform: none !important; margin: 0 !important; padding: 0 !important; }` },
+            { name: "Mode: Original Aspect Ratio", css: `video { position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; height: 100dvh !important; object-fit: contain !important; object-position: center !important; z-index: 99990 !important; transform: none !important; margin: 0 !important; padding: 0 !important; background: #000 !important; }` }
         ];
         let currentMode = 0; ratioStyle.innerHTML = modes[currentMode].css;
 
@@ -145,13 +149,13 @@
             </div>
             <div class="rg-caption rg-pointer" id="ui-caption"></div>
             <div class="rg-action-row rg-pointer">
-                <button class="rg-action-btn rg-speed-text" id="ui-btn-speed">1x</button>
-                <button class="rg-action-btn" id="ui-btn-mute"><svg id="ui-icon-mute" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path></svg></button>
-                <button class="rg-action-btn" id="ui-btn-save"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg></button>
-                <button class="rg-action-btn" id="ui-btn-aspect"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg></button>
-                <button class="rg-action-btn" id="ui-btn-feed"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg></button>
-                <button class="rg-action-btn" id="ui-btn-autoscroll"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 13 12 18 17 13"></polyline><polyline points="7 6 12 11 17 6"></polyline></svg></button>
-                <button class="rg-action-btn" id="ui-btn-master"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg></button>
+                <button class="rg-action-btn rg-speed-text" id="ui-btn-speed" title="Speed">1x</button>
+                <button class="rg-action-btn" id="ui-btn-mute" title="Mute/Unmute"><svg id="ui-icon-mute" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path></svg></button>
+                <button class="rg-action-btn" id="ui-btn-save" title="Like"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg></button>
+                <button class="rg-action-btn" id="ui-btn-aspect" title="Aspect Ratio"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg></button>
+                <button class="rg-action-btn" id="ui-btn-feed" title="Home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg></button>
+                <button class="rg-action-btn" id="ui-btn-autoscroll" title="Auto-Scroll"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 13 12 18 17 13"></polyline><polyline points="7 6 12 11 17 6"></polyline></svg></button>
+                <button class="rg-action-btn" id="ui-btn-master" title="Normal Mode"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg></button>
             </div>
             <div id="rg-toast"></div>
             <div id="rg-scrub-toast">0:00 / 0:00</div>
@@ -303,7 +307,7 @@
             updateMuteVisuals(); showToast(globalMuteState ? 'Muted' : 'Unmuted'); 
         };
 
-        // Aspect ratio button functionality cycling through Original Size -> Crop Full
+        // Aspect ratio toggle button cycling: Original Aspect Ratio <-> Crop to Full (Cover)
         document.getElementById('ui-btn-aspect').onclick = () => { 
             currentMode = (currentMode + 1) % modes.length; 
             ratioStyle.innerHTML = modes[currentMode].css; 

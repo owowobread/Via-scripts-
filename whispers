@@ -1,0 +1,232 @@
+const BOT_TOKEN = "8339035171:AAFLI8K2RnOmKeAJd27cvOe4MHzh3GwW49g";
+const LOG_CHAT_ID = "-1004467443130"; 
+
+const CASUAL_MESSAGES = [
+  "Hi", "Hey!", "Hello", "Good morning", "Good evening", 
+  "How are you?", "Wassup", "What's up?", "How's it going?", "Where are you from?", 
+  "Nice to meet you", "How's your day?", "Hey there!", "Long time no see", "What are you up to?", 
+  "Did you have lunch?", "Hope you're doing well", "You around?", "Quick question...", "Guess what?", 
+  "Have a good day!", "Catch you later", "What's new?", "How have you been?", "Yo!", 
+  "Sup?", "Good to see you", "Hey, got a minute?", "What's on your mind?", "Talk to you soon", 
+  "Hi there", "Doing okay?", "How's life?", "Hey buddy", "Just checking in", 
+  "Everything good?", "Howdy", "Greetings", "Are you busy?", "Got a sec?"
+];
+
+// Custom insults restored
+const INSULTS = [
+  "Sup Jackass LMAAAOO", 
+  "Sup you fatfuck imbecile", 
+  "Didn't you read the button?", 
+  "Keep your hands to yourself!", 
+  "Fat monkey", 
+  "What were you expecting LMAO.", 
+  "Lmao tricked you mf now SMD", 
+  "Got tricked you fat swine? Lmao", 
+  "Get lost you fat piece of shit", 
+  "Why are you clicking THIS wacko?",
+  "Fat baboon lmao told you not to touch me",
+  "You're a fucking retard for touching it"
+];
+
+function getRandomMsg() {
+  return CASUAL_MESSAGES[Math.floor(Math.random() * CASUAL_MESSAGES.length)];
+}
+
+function getRandomInsult() {
+  return INSULTS[Math.floor(Math.random() * INSULTS.length)];
+}
+
+export default {
+  async fetch(request, env, ctx) {
+    if (request.method === "POST") {
+      const payload = await request.json();
+
+      // 1. INLINE MODE (@botusername @target message OR @botusername message @target)
+      if (payload.inline_query) {
+        const query = payload.inline_query.query.trim();
+
+        let target = null;
+        let secretText = null;
+
+        const matchStart = query.match(/^(@\w+|\d{5,})\s+(.+)$/);
+        const matchEnd = query.match(/^(.+)\s+(@\w+|\d{5,})$/);
+
+        if (matchStart) {
+          target = matchStart[1];
+          secretText = matchStart[2].trim();
+        } else if (matchEnd) {
+          secretText = matchEnd[1].trim();
+          target = matchEnd[2];
+        }
+
+        if (target && secretText) {
+          const displayMsg = getRandomMsg(); 
+
+          const saveRes = await sendToTelegram("sendMessage", {
+            chat_id: LOG_CHAT_ID,
+            text: `${target}:::${displayMsg}:::${secretText}`
+          });
+
+          if (saveRes.ok) {
+            const msgId = saveRes.result.message_id;
+
+            await sendToTelegram("answerInlineQuery", {
+              inline_query_id: payload.inline_query.id,
+              results: [{
+                type: "article",
+                id: msgId.toString(),
+                title: `Send stealth whisper to ${target}`,
+                description: "Disguised as a random casual greeting.",
+                input_message_content: {
+                  message_text: displayMsg
+                },
+                reply_markup: {
+                  inline_keyboard: [[{ text: "Don't touch it 😤", callback_data: `w:${msgId}` }]]
+                }
+              }],
+              cache_time: 0
+            });
+          }
+        }
+      }
+
+      // 2. REPLY MODE (Left swipe a user's message and type /whisper text)
+      if (payload.message && payload.message.reply_to_message && payload.message.text && payload.message.text.startsWith("/whisper")) {
+        const targetUser = payload.message.reply_to_message.from;
+        const target = targetUser.username ? `@${targetUser.username}` : targetUser.id.toString();
+        const secretText = payload.message.text.replace("/whisper", "").trim();
+
+        if (secretText) {
+          const displayMsg = getRandomMsg(); 
+
+          const saveRes = await sendToTelegram("sendMessage", {
+            chat_id: LOG_CHAT_ID,
+            text: `${target}:::${displayMsg}:::${secretText}`
+          });
+
+          if (saveRes.ok) {
+            const msgId = saveRes.result.message_id;
+
+            await sendToTelegram("sendMessage", {
+              chat_id: payload.message.chat.id,
+              text: displayMsg,
+              reply_markup: {
+                inline_keyboard: [[{ text: "Don't touch it 😤", callback_data: `w:${msgId}` }]]
+              }
+            });
+
+            await sendToTelegram("deleteMessage", {
+              chat_id: payload.message.chat.id,
+              message_id: payload.message.message_id
+            });
+          }
+        }
+      }
+
+      // 3. HANDLE BUTTON CLICKS
+      if (payload.callback_query) {
+        const cb = payload.callback_query;
+
+        if (cb.data && cb.data.startsWith("w:")) {
+          const msgId = cb.data.substring(2);
+
+          const fwdRes = await sendToTelegram("forwardMessage", {
+            chat_id: LOG_CHAT_ID,
+            from_chat_id: LOG_CHAT_ID,
+            message_id: msgId
+          });
+
+          if (!fwdRes.ok) {
+            await sendToTelegram("answerCallbackQuery", {
+              callback_query_id: cb.id,
+              text: "Expired.",
+              show_alert: true
+            });
+            return new Response("OK");
+          }
+
+          await sendToTelegram("deleteMessage", {
+            chat_id: LOG_CHAT_ID,
+            message_id: fwdRes.result.message_id
+          });
+
+          const savedText = fwdRes.result.text || "";
+          const parts = savedText.split(":::");
+
+          let target, displayMsg, text;
+
+          if (parts.length >= 3) {
+            target = parts[0];
+            displayMsg = parts[1];
+            text = parts.slice(2).join(":::"); 
+          } else {
+            target = parts[0];
+            displayMsg = "Hey!"; 
+            text = parts.slice(1).join(":::"); 
+          }
+
+          const clickerUsername = cb.from.username ? `@${cb.from.username}` : null;
+          const clickerId = cb.from.id.toString();
+
+          if (target === clickerUsername || target === clickerId) {
+
+            // Show the SECRET TEXT alert to the target
+            await sendToTelegram("answerCallbackQuery", {
+              callback_query_id: cb.id,
+              text: text,
+              show_alert: true
+            });
+
+            // INLINE MODE
+            if (cb.inline_message_id) {
+              await sendToTelegram("editMessageText", {
+                inline_message_id: cb.inline_message_id,
+                text: displayMsg
+              });
+
+            // REPLY MODE
+            } else if (cb.message) {
+              await sendToTelegram("editMessageText", {
+                chat_id: cb.message.chat.id,
+                message_id: cb.message.message_id,
+                text: displayMsg
+              });
+
+              ctx.waitUntil((async () => {
+                await new Promise(r => setTimeout(r, 3000));
+                await sendToTelegram("deleteMessage", {
+                  chat_id: cb.message.chat.id,
+                  message_id: cb.message.message_id
+                });
+              })());
+            }
+
+            await sendToTelegram("deleteMessage", {
+              chat_id: LOG_CHAT_ID,
+              message_id: msgId
+            });
+
+          } else {
+            // WRONG USER tapped it: Show the random insult alert
+            await sendToTelegram("answerCallbackQuery", {
+              callback_query_id: cb.id,
+              text: getRandomInsult(),
+              show_alert: true
+            });
+          }
+        }
+      }
+    }
+    return new Response("OK");
+  }
+};
+
+async function sendToTelegram(method, body) {
+  const url = `https://api.telegram.org/bot${BOT_TOKEN}/${method}`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+  return await response.json();
+}

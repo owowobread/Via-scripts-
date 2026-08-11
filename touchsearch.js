@@ -1,14 +1,11 @@
 // ==UserScript==
 // @name         Touch to Search
 // @namespace    http://tampermonkey.net/
-// @version      1.9
-// @description  AMOLED glass bottom sheet, half-screen expansion, scroll dismiss, and stable image lightbox. Universal site & CSP bypass fix.
+// @version      3.0
+// @description  AMOLED glass sheet. Reverted to pure, instant iframe. Uses Google Web Mode (udm=14) and no-personalization (pws=0) to bypass login captchas.
 // @match        *://*/*
 // @grant        GM_xmlhttpRequest
 // @grant        GM.xmlHttpRequest
-// @connect      google.com
-// @connect      api.dictionaryapi.dev
-// @connect      en.wikipedia.org
 // @run-at       document-end
 // ==/UserScript==
 
@@ -238,7 +235,7 @@
     let activeHighResImage = "";
     let hideTimeout;
 
-    // 4. Cross-Origin GM Fetch (Bypasses Site CSP Restrictions)
+    // 4. API Fetching for the Summary (Wiki/Dict)
     function gmFetchJson(url) {
         return new Promise((resolve, reject) => {
             const gmRequest = (typeof GM_xmlhttpRequest !== 'undefined') ? GM_xmlhttpRequest :
@@ -259,10 +256,7 @@
                     ontimeout: () => reject(new Error('Timeout'))
                 });
             } else {
-                fetch(url)
-                    .then(res => { if (!res.ok) throw new Error(); return res.json(); })
-                    .then(resolve)
-                    .catch(reject);
+                fetch(url).then(res => res.json()).then(resolve).catch(reject);
             }
         });
     }
@@ -285,10 +279,7 @@
 
     function collapsePanel() {
         panel.classList.remove('expanded');
-        setTimeout(() => { 
-            iframeEl.src = ""; 
-            iframeEl.removeAttribute("srcdoc");
-        }, 350); 
+        setTimeout(() => { iframeEl.src = ""; }, 350); 
     }
 
     function hidePanel() {
@@ -353,7 +344,6 @@
     }
 
     // 7. Event Listeners using Capture Phase
-    
     document.addEventListener('selectionchange', () => {
         clearTimeout(hideTimeout);
         hideTimeout = setTimeout(() => {
@@ -409,65 +399,19 @@
         lastScrollY = window.scrollY;
     }, { passive: true, capture: true });
     
-    // NEW: Render Google HTML directly inside iframe without hitting the CAPTCHA triggers
+    // 8. THE FIX: Reverted to pure iframe load.
+    // &igu=1 allows it to be embedded.
+    // &pws=0 simulates a logged-out, non-personalized session.
+    // &udm=14 strips the AI/bloat scripts that Google's bot-detection flags.
     summaryContent.addEventListener('click', () => {
          if (activeSelection) {
              panel.classList.add('expanded');
-             
-             const gmRequest = (typeof GM_xmlhttpRequest !== 'undefined') ? GM_xmlhttpRequest :
-                              (typeof GM !== 'undefined' && GM.xmlHttpRequest) ? GM.xmlHttpRequest : null;
-                              
-             if (gmRequest) {
-                 iframeEl.removeAttribute("src");
-                 iframeEl.srcdoc = `<html><body style="background:#202124;color:#e8eaed;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:-apple-system,sans-serif;">Loading search...</body></html>`;
-                 
-                 gmRequest({
-                     method: 'GET',
-                     url: `https://www.google.com/search?q=${encodeURIComponent(activeSelection)}`,
-                     headers: { 'User-Agent': navigator.userAgent },
-                     onload: (res) => {
-                         // Check if we accidentally hit a captcha page
-                         if (res.status >= 200 && res.status < 300 && !res.responseText.includes('captcha-form')) {
-                             let html = res.responseText;
-                             
-                             // 1. Force a base url so images and relative css styles load correctly
-                             if (html.includes('<head>')) {
-                                 html = html.replace('<head>', '<head><base href="https://www.google.com/">');
-                             } else {
-                                 html = '<head><base href="https://www.google.com/"></head>' + html;
-                             }
-                             
-                             // 2. Hide Google header/searchbar to save space in the half-screen sheet
-                             const css = `<style>header, #searchform, .tsf, #tads { display: none !important; } #main { padding-top: 10px !important; }</style>`;
-                             if (html.includes('</head>')) {
-                                 html = html.replace('</head>', css + '</head>');
-                             }
-                             
-                             // 3. Force all links to open in a new tab (this prevents link clicks from breaking the frame)
-                             html = html.replace(/<a([^>]+)>/gi, (match, p1) => {
-                                 if (!p1.includes('target=')) return `<a${p1} target="_blank">`;
-                                 return match.replace(/target=["'][^"']*["']/i, 'target="_blank"');
-                             });
-                             
-                             iframeEl.srcdoc = html;
-                         } else {
-                             // Fallback in edge cases
-                             iframeEl.removeAttribute("srcdoc");
-                             iframeEl.src = `https://www.google.com/search?q=${encodeURIComponent(activeSelection)}&igu=1`;
-                         }
-                     },
-                     onerror: () => {
-                         iframeEl.removeAttribute("srcdoc");
-                         iframeEl.src = `https://www.google.com/search?q=${encodeURIComponent(activeSelection)}&igu=1`;
-                     }
-                 });
-             } else {
-                 iframeEl.src = `https://www.google.com/search?q=${encodeURIComponent(activeSelection)}&igu=1`;
-             }
+             iframeEl.src = `https://www.google.com/search?q=${encodeURIComponent(activeSelection)}&igu=1&pws=0&udm=14`;
              window.getSelection().removeAllRanges(); 
          }
     });
 
+    // 9. Lightbox & Drag Area Logic
     iconEl.addEventListener('click', (e) => {
         const img = iconEl.querySelector('img');
         if (img && activeHighResImage) {

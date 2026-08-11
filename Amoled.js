@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         AMOLED Clean Injector (Via Browser)
+// @name         AMOLED
 // @namespace    http://viabrowser.com/
 // @version      18.0
 // @description  Pure, lightweight AMOLED CSS injector. Zero lag, zero data left behind.
@@ -45,3 +45,4 @@
         document.documentElement.appendChild(styleTag);
     }
 })();
+W
